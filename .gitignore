@@ -1,0 +1,27 @@
+# 대회 원본 데이터
+data/
+open/
+*.csv
+*.zip
+
+# 학습 모델 및 대용량 파일
+models/
+model/
+*.pt
+*.pth
+*.pkl
+*.joblib
+*.cbm
+*.parquet
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# 환경 변수
+.env
