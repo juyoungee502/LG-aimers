@@ -7,6 +7,9 @@ open/
 # 학습 모델 및 대용량 파일
 models/
 model/
+submit/model/
+outputs/
+submissions/
 *.pt
 *.pth
 *.pkl
@@ -25,3 +28,7 @@ venv/
 
 # 환경 변수
 .env
+
+# 로컬 실행 산출물
+output/
+*.log

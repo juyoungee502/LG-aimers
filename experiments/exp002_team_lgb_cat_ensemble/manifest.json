@@ -1,0 +1,22 @@
+{
+  "experiment_id": "exp002_team_lgb_cat_ensemble",
+  "owner": "juyoungee502",
+  "branch": "origin/main",
+  "status": "implemented",
+  "model": "Full-history LightGBM + 2024-only LightGBM + CatBoost blend",
+  "feature_version": "feature_engineering.py:v2",
+  "train_entrypoint": "train_final.py",
+  "inference_entrypoint": "submit/script.py",
+  "train_seasons": [2019, 2020, 2021, 2022, 2023, 2024],
+  "validation_seasons": [2024],
+  "seed": null,
+  "metrics": {
+    "brier": 0.2476676669,
+    "reported_validation_score": 856.36,
+    "public_score": null,
+    "private_score": null
+  },
+  "artifacts": ["submit/model/model_bundle.pkl"],
+  "reproduce": "python train_final.py",
+  "notes": "Blend weights: lgb_full 0.404, lgb_recent 0.189, catboost 0.407. Values transcribed from train_final.py."
+}

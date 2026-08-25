@@ -1,0 +1,23 @@
+{
+  "experiment_id": "exp001_junseo_temporal_catboost",
+  "owner": "JunseoPark543",
+  "branch": "experiment/junseo-catboost-gpu",
+  "status": "implemented_not_trained",
+  "model": "CatBoost with temporal sample weights and conservative Platt calibration",
+  "feature_version": "features.py:v1",
+  "train_entrypoint": "train.py",
+  "inference_entrypoint": "script.py",
+  "train_seasons": [2019, 2020, 2021, 2022, 2023, 2024],
+  "validation_seasons": [2024],
+  "seed": 20250825,
+  "metrics": {
+    "logloss": null,
+    "auc": null,
+    "brier": null,
+    "public_score": null,
+    "private_score": null
+  },
+  "artifacts": ["model/catboost.cbm", "model/metadata.json"],
+  "reproduce": "python train.py --preset full --task-type GPU --devices 0",
+  "notes": "No test-row aggregates. Trackman IDs are not joined to anonymous main IDs."
+}

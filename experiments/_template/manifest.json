@@ -1,0 +1,21 @@
+{
+  "experiment_id": "expNNN_model_change",
+  "owner": "name",
+  "branch": "experiment/name-model",
+  "status": "planned",
+  "model": "",
+  "feature_version": "",
+  "train_entrypoint": "",
+  "inference_entrypoint": "",
+  "train_seasons": [],
+  "validation_seasons": [],
+  "seed": null,
+  "metrics": {
+    "metric_name": null,
+    "public_score": null,
+    "private_score": null
+  },
+  "artifacts": [],
+  "reproduce": "",
+  "notes": ""
+}
