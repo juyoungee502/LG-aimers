@@ -30,6 +30,27 @@ def masks(rows):
     }
 
 
+def add_pitcher_season_exposure(rows):
+    values = np.zeros(len(rows), dtype=np.float32)
+    end_n = {}
+    seasons = rows["season"].to_numpy()
+    for season in np.sort(rows["season"].unique()):
+        positions = np.flatnonzero(seasons == season)
+        block = rows.iloc[positions]
+        base = block["pitcher_id"].map(end_n).fillna(0.0).to_numpy(float)
+        values[positions] = np.maximum(
+            0.0, block["asof_pitcher_n"].fillna(0.0).to_numpy(float) - base,
+        )
+        last = block.groupby("pitcher_id", observed=True, sort=False).tail(1)
+        end_n.update(zip(
+            last["pitcher_id"].astype(int).tolist(),
+            (last["asof_pitcher_n"].fillna(0.0) + 1.0).tolist(),
+        ))
+    rows = rows.copy()
+    rows["pitcher_season_n"] = values
+    return rows
+
+
 def curve(target, base, first, second, mask):
     reference = float(target[mask].mean() * (1.0 - target[mask].mean()))
     residual = target[mask] - base[mask]
@@ -57,8 +78,10 @@ def main():
     root = Path(__file__).resolve().parent
     data = pd.read_csv(
         root / "data" / "train.csv",
-        usecols=["season", "game_month"], encoding="utf-8-sig", low_memory=False,
+        usecols=["season", "game_month", "pitcher_id", "asof_pitcher_n"],
+        encoding="utf-8-sig", low_memory=False,
     )
+    data = add_pitcher_season_exposure(data)
     years = {}
     for year in (2023, 2024):
         with np.load(root / "research" / f"v23_trackman_no_month_{year}.npz") as z:
@@ -74,16 +97,30 @@ def main():
         }
 
     gates = {
-        "through_july": lambda month: (month <= 7).astype(float),
-        "spring_only": lambda month: (month <= 5).astype(float),
-        "july_half": lambda month: np.where(month <= 5, 1.0, np.where(month <= 7, .5, 0.0)),
-        "late_quarter": lambda month: np.where(month <= 5, 1.0, np.where(month <= 7, .75, .25)),
+        "through_july": lambda rows: (rows["game_month"].to_numpy() <= 7).astype(float),
+        "spring_only": lambda rows: (rows["game_month"].to_numpy() <= 5).astype(float),
+        "july_half": lambda rows: np.where(
+            rows["game_month"].to_numpy() <= 5, 1.0,
+            np.where(rows["game_month"].to_numpy() <= 7, .5, 0.0),
+        ),
+        "late_quarter": lambda rows: np.where(
+            rows["game_month"].to_numpy() <= 5, 1.0,
+            np.where(rows["game_month"].to_numpy() <= 7, .75, .25),
+        ),
+        "pitch_n_300": lambda rows: (rows["pitcher_season_n"].to_numpy() <= 300).astype(float),
+        "pitch_n_600": lambda rows: (rows["pitcher_season_n"].to_numpy() <= 600).astype(float),
+        "pitch_decay_200": lambda rows: 200.0 / (200.0 + rows["pitcher_season_n"].to_numpy()),
+        "pitch_decay_500": lambda rows: 500.0 / (500.0 + rows["pitcher_season_n"].to_numpy()),
+        "july_or_low_n": lambda rows: (
+            (rows["game_month"].to_numpy() <= 7)
+            | (rows["pitcher_season_n"].to_numpy() <= 200)
+        ).astype(float),
     }
     reports = []
     for gate_name, gate_fn in gates.items():
         curves = {}
         for year, item in years.items():
-            gate = gate_fn(item["rows"]["game_month"].to_numpy())
+            gate = gate_fn(item["rows"])
             derivative = item["base"] * (1.0 - item["base"])
             first = derivative * item["no_month"]
             second = derivative * gate * item["command"]
@@ -120,7 +157,7 @@ def main():
         gains = {}
         segment_values = []
         for year, item in years.items():
-            gate = gate_fn(item["rows"]["game_month"].to_numpy())
+            gate = gate_fn(item["rows"])
             candidate = sigmoid(
                 logit(item["base"])
                 + report["no_month_weight"] * item["no_month"]
