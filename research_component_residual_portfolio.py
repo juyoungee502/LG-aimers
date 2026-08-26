@@ -200,17 +200,52 @@ def main():
         })
         remaining.pop(key)
 
+    full_labels = [f"2023_to_2024_q{index}" for index in range(1, 5)]
+    full_y = np.concatenate([prepared_blocks[label]["y"] for label in full_labels])
+    full_base = np.concatenate([prepared_blocks[label]["v21"] for label in full_labels])
+    full_correction = np.concatenate([total[label] for label in full_labels])
+    full_2024_gain = gain(full_y, full_base, full_correction)
+
+    deploy_frame = rows[2024]
+    deploy_base = folds[2024]["base"]
+    deploy_residual = folds[2024]["y"] - deploy_base
+    deploy_configuration = freeze_v21(deploy_frame, deploy_residual)
+    deploy_v21 = np.clip(
+        deploy_base + apply_frozen_portfolio(deploy_frame, deploy_configuration),
+        .005, .995,
+    )
+    deploy_residual = folds[2024]["y"] - deploy_v21
+    deploy_gates = gates(deploy_frame)
+    production_effects = []
+    for chosen in selected:
+        prediction_name, gate_name = chosen["key"].split(":", 1)
+        kind, index = candidate_predictions[prediction_name]
+        candidate = folds[2024][kind] if index is None else folds[2024][kind][:, index]
+        direction = np.nan_to_num(candidate - deploy_base, nan=0.)
+        direction *= deploy_gates[gate_name]
+        raw_weight = fit_weight(deploy_residual, direction)
+        production_effects.append({
+            "prediction": prediction_name, "gate": gate_name,
+            "scale": float(chosen["configuration"]["scale"]),
+            "raw_weight": raw_weight,
+            "effective_weight": raw_weight * float(chosen["configuration"]["scale"]),
+        })
+
     output = {
         "model_names": names,
         "top_candidates": reports[:100],
         "selected": selected,
         "final_gains": total_gains,
+        "full_2024_gain": full_2024_gain,
+        "production_effects": production_effects,
     }
     path = root / "research/component_residual_portfolio_v21.json"
     path.write_text(json.dumps(output, indent=2), encoding="utf-8")
     print(json.dumps({
         "model_names": names, "top_candidates": reports[:30],
         "selected": selected, "final_gains": total_gains,
+        "full_2024_gain": full_2024_gain,
+        "production_effects": production_effects,
     }, indent=2), flush=True)
     print(f"Saved {path}", flush=True)
 
