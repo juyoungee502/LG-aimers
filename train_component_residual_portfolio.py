@@ -26,6 +26,9 @@ SELECTED = (
     ("brier_regressor", "regular_count_1", .25),
     ("categorical_catboost", "regular_count_1", .25),
     ("categorical_count_expert", "regular_runners_2", .25),
+    ("categorical_catboost", "regular_count_5", .25),
+    ("pre_specialist_blend", "f_regime", .25),
+    ("history_expert", "regular_count_9", .25),
 )
 
 
@@ -49,6 +52,8 @@ def gate(frame, name):
         return count % 3 != 2
     if name == "two_strike":
         return count % 3 == 2
+    if name == "f_regime":
+        return frame["game_type"].eq("F").to_numpy()
     if name.startswith("regular_count_"):
         return regular & (count == int(name.rsplit("_", 1)[1]))
     if name.startswith("regular_runners_"):
@@ -115,7 +120,7 @@ def main():
         ],
         "validation_effects": validation_config["effects"],
     }
-    if report["v22_bss"] < 984.9 or min(report["gain"], *report["quarter_gains"]) <= 0.:
+    if report["v22_bss"] < 985.2 or min(report["gain"], *report["quarter_gains"]) <= 0.:
         raise RuntimeError(f"Component portfolio failed promotion: {report}")
     print(f"v22 validation: {json.dumps(report)}", flush=True)
 
@@ -129,8 +134,10 @@ def main():
     )
     metadata_path = root / "submit/model/metadata.json"
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    if metadata.get("version") != "v21_robust_residual_portfolio":
-        raise ValueError(f"Expected v21 metadata, got {metadata.get('version')}")
+    if metadata.get("version") not in (
+        "v21_robust_residual_portfolio", "v22_component_residual_portfolio",
+    ):
+        raise ValueError(f"Expected v21/v22 metadata, got {metadata.get('version')}")
     metadata["version"] = "v22_component_residual_portfolio"
     metadata["component_residual_portfolio"] = deploy_config
     metadata["training_info"]["v22_validation"] = report

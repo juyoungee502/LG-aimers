@@ -36,6 +36,8 @@ def _gate(frame, name):
         return count % 3 != 2
     if name == "two_strike":
         return count % 3 == 2
+    if name == "f_regime":
+        return frame["game_type"].astype(str).eq("F").to_numpy()
     if name.startswith("regular_count_"):
         return regular & (count == int(name.rsplit("_", 1)[1]))
     if name.startswith("regular_runners_"):
