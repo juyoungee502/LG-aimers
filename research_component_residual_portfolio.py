@@ -173,7 +173,7 @@ def main():
         for row in best.values() if row["min_transfer"] > -.5
     }
     selected = []
-    for step in range(12):
+    for step in range(24):
         winner = None
         for key, config in remaining.items():
             correction = candidates[key]
