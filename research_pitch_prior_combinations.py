@@ -82,6 +82,11 @@ def main():
                 "min_half": min(value for values in half_gains.values() for value in values),
             }
             results.append(result)
+    by_half = sorted(
+        results,
+        key=lambda item: (item["min_half"], item["min_year"], item["mean_year"]),
+        reverse=True,
+    )
     results.sort(
         key=lambda item: (item["min_year"], item["min_half"], item["mean_year"]),
         reverse=True,
@@ -90,6 +95,7 @@ def main():
         "base": "v16 fixed pitch-failure prior",
         "fixed_proxy_centers": centers,
         "top": results[:50],
+        "top_half_robust": by_half[:50],
     }
     output = root / "research" / "pitch_prior_combinations.json"
     output.parent.mkdir(parents=True, exist_ok=True)
