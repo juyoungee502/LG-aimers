@@ -1,0 +1,18 @@
+{
+  "id": "exp015_weighted_categorical_specialist",
+  "version": "v15",
+  "status": "candidate",
+  "parent": "exp014_weighted_catboost",
+  "changes": [
+    "Train recency-weighted native-categorical CatBoost models separately for two-strike and other counts",
+    "Add only the specialist family that improved five-block 2024 blend validation"
+  ],
+  "validation": {
+    "segment_five_block_v14_bss": 906.2197,
+    "segment_five_block_v15_one_seed_bss": 909.4044,
+    "segment_five_block_delta": 3.1847,
+    "production_fit_v14_bss": 916.9668,
+    "production_fit_v15_one_seed_bss": 921.5086
+  },
+  "public_score": null
+}

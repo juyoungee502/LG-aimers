@@ -20,11 +20,18 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--submit-dir", default="submit")
     p.add_argument("--output", default="submission_v3.zip")
-    p.add_argument("--expected-version", default="v14_weighted_catboost")
+    p.add_argument("--expected-version", default="v15_weighted_categorical_specialist")
     args = p.parse_args(); root = Path(args.submit_dir)
     model_names = list(REQUIRED_MODELS)
-    if args.expected_version == "v14_weighted_catboost":
+    if args.expected_version in (
+        "v14_weighted_catboost", "v15_weighted_categorical_specialist",
+    ):
         model_names.extend(f"catboost_weighted_{index}.cbm" for index in range(3))
+    if args.expected_version == "v15_weighted_categorical_specialist":
+        model_names.extend(
+            f"catboost_weighted_categorical_{label}_{index}.cbm"
+            for label in ("other", "two_strike") for index in range(3)
+        )
     required = [
         root / "script.py", root / "requirements.txt", Path("feature_engineering.py"),
         Path("residual_effects.py"),

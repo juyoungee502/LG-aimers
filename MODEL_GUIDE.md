@@ -23,29 +23,32 @@ python train.py --preset full --task-type GPU --devices 0
 For multiple GPUs, CatBoost accepts values such as `--devices 0:1` or
 `--devices 0-3`.
 
-## Recommended BSS ensemble (v14)
+## Recommended BSS ensemble (v15)
 
 The competition model is trained with rolling 2023/2024 validation and directly
 selects the blend by normalized Brier score:
 
 ```bash
-bash run_v14.sh
+bash run_v15.sh
 ```
 
-The one-command runner trains one weighted component, upgrades v13 artifacts, builds
-`submission_v14.zip`, saves the training log and OOF diagnostics, and bundles the artifacts as
-`outputs/results_v14.zip`. V11 must have been trained once and upgraded through v13 on the
-server; v14 trains only three additional CatBoost models for final inference.
+The one-command runner trains recency-weighted native-categorical count specialists,
+upgrades v14 artifacts, builds `submission_v15.zip`, saves the training log and OOF
+diagnostics, and bundles the artifacts as `outputs/results_v15.zip`. V14 must have
+been built once on the server; v15 trains six additional CatBoost models for final
+inference.
 
 The trainer writes native LightGBM/CatBoost models and JSON metadata under
 `submit/model/`. V14 adds a CatBoost component with a three-year sample-weight
-half-life; it improved five-block 2024 blend validation by 5.49 BSS. V13's
+half-life; it improved five-block 2024 blend validation by 5.49 BSS. V15 applies
+the same weighting to separate native-categorical count specialists, improving
+the updated five-block score by another 3.18 BSS. V13's
 empirical-Bayes main/context effects build final
 tables from the most recent 2024 OOF residuals; this beat the two-season source in
 the three latest rolling transfers. Deterministic table geometry reshapes the batter
 effect and adds player-exposure directions. The final inference remains a frozen,
 row-independent lookup using only the current row's keys. Diagnostics are saved to
-`outputs/v14_oof_predictions.npz`.
+`outputs/v15_oof_predictions.npz`.
 The builder checks the model version and expected file layout before producing
 the ZIP.
 

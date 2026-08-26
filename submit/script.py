@@ -228,6 +228,8 @@ def main():
         "lgb_b": lgb.Booster(model_str=lgb_1_text),
         "catboost": [],
         "weighted_catboost": [],
+        "weighted_categorical_other": [],
+        "weighted_categorical_two_strike": [],
         "count_other": [],
         "count_two_strike": [],
         "categorical_catboost": [],
@@ -245,6 +247,17 @@ def main():
                 os.path.join(model_dir, f"catboost_weighted_{index}.cbm")
             )
             models["weighted_catboost"].append(weighted_model)
+        if "weighted_categorical_specialist" in bundle.get("model_names", []):
+            for label, key in (
+                ("other", "weighted_categorical_other"),
+                ("two_strike", "weighted_categorical_two_strike"),
+            ):
+                specialist = CatBoostClassifier()
+                specialist.load_model(os.path.join(
+                    model_dir,
+                    f"catboost_weighted_categorical_{label}_{index}.cbm",
+                ))
+                models[key].append(specialist)
         for label, key in (("other", "count_other"), ("two_strike", "count_two_strike")):
             expert = CatBoostClassifier()
             expert.load_model(os.path.join(model_dir, f"catboost_{label}_{index}.cbm"))
@@ -286,6 +299,17 @@ def main():
         if models["weighted_catboost"] else np.zeros(len(features), dtype=np.float64)
     )
     two_strike_gate = features["two_strike"].to_numpy().astype(bool)
+    weighted_categorical_prediction = np.zeros(len(features), dtype=np.float64)
+    for gate_value, key in (
+        (False, "weighted_categorical_other"),
+        (True, "weighted_categorical_two_strike"),
+    ):
+        mask = two_strike_gate == gate_value
+        if mask.any() and models[key]:
+            weighted_categorical_prediction[mask] = np.mean([
+                model.predict_proba(features.loc[mask])[:, 1]
+                for model in models[key]
+            ], axis=0)
     count_prediction = np.empty(len(features), dtype=np.float64)
     if (~two_strike_gate).any():
         count_prediction[~two_strike_gate] = np.mean([
@@ -328,6 +352,8 @@ def main():
             * categorical_count_prediction[mask]
             + segment_weights["brier_regressor"] * brier_prediction[mask]
             + segment_weights.get("weighted_catboost", 0.) * weighted_cat_prediction[mask]
+            + segment_weights.get("weighted_categorical_specialist", 0.)
+            * weighted_categorical_prediction[mask]
         )
         prediction[mask] = params["intercept"] + params["slope"] * raw_prediction
     residual_adjustment, _ = apply_residual_effects(test, bundle["residual_effects"])
