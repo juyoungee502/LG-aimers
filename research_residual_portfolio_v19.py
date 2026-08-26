@@ -9,6 +9,20 @@ import pandas as pd
 
 
 SPECS = {
+    "count": ["count_state"],
+    "baseout": ["base_out_state"],
+    "inning": ["inning_bucket"],
+    "month": ["game_month"],
+    "hands": ["hand_matchup_code"],
+    "runners": ["runner_count_code"],
+    "score": ["score_bucket"],
+    "outs_count": ["outs_before", "count_state"],
+    "inning_count": ["inning_bucket", "count_state"],
+    "month_count": ["game_month", "count_state"],
+    "runners_count": ["runner_count_code", "count_state"],
+    "hands_count": ["hand_matchup_code", "count_state"],
+    "topbottom_count": ["top_bottom", "count_state"],
+    "score_count": ["score_bucket", "count_state"],
     "pitcher": ["pitcher_id"],
     "batter": ["batter_id"],
     "pitcher_count": ["pitcher_id", "count_state"],
@@ -42,6 +56,16 @@ def prepare(frame):
     result["inning_bucket"] = np.select(
         [result["inning"] <= 3, result["inning"] <= 6], [0, 1], default=2,
     ).astype(np.int8)
+    result["hand_matchup_code"] = (
+        pd.to_numeric(result["pitcher_hand"], errors="coerce").fillna(0).astype(np.int8) * 3
+        + pd.to_numeric(result["batter_hand"], errors="coerce").fillna(0).astype(np.int8)
+    )
+    result["runner_count_code"] = pd.to_numeric(
+        result["num_runners_on"], errors="coerce"
+    ).fillna(0).astype(np.int8)
+    result["score_bucket"] = pd.to_numeric(
+        result["score_diff_pitcher_team"], errors="coerce"
+    ).fillna(0).clip(-3, 3).astype(np.int8)
     return result
 
 
