@@ -130,8 +130,10 @@ def main():
 
     metadata_path = root / "submit/model/metadata.json"
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    if metadata.get("version") != "v22_component_residual_portfolio":
-        raise ValueError(f"Expected v22 metadata, got {metadata.get('version')}")
+    if metadata.get("version") not in (
+        "v22_component_residual_portfolio", "v23_probability_residual_portfolio",
+    ):
+        raise ValueError(f"Expected v22/v23 metadata, got {metadata.get('version')}")
     anchor = oof["blended"][valid].astype(np.float64)
     components = component_dict(oof, valid)
     deploy_v21 = np.clip(
