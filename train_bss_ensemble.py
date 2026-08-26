@@ -24,7 +24,12 @@ CAT_COLUMNS = [
     "pitcher_id", "batter_id", "pitcher_team_id", "batter_team_id",
     "pitcher_hand", "batter_hand", "count_state", "hand_matchup", "team_matchup",
 ]
-MODEL_NAMES = ["lgb_a", "lgb_b", "catboost", "history_expert", "count_expert"]
+MODEL_NAMES = [
+    "lgb_a", "lgb_b", "catboost", "history_expert", "count_expert",
+    "categorical_catboost",
+]
+SEGMENT_MODEL_INDICES = [2, 4, 5]
+SEGMENT_MODEL_NAMES = [MODEL_NAMES[index] for index in SEGMENT_MODEL_INDICES]
 
 
 def arguments() -> argparse.Namespace:
@@ -127,6 +132,16 @@ def fit_cat(x_train, y_train, args, seed):
     return model
 
 
+def fit_categorical_cat(x_train, y_train, args, seed):
+    """Fit an intentionally diverse CatBoost using native categorical IDs."""
+    rounds = 1200 if args.preset == "full" else 150
+    params = cat_params(args, rounds, seed)
+    params.update(max_ctr_complexity=1, one_hot_max_size=32)
+    model = CatBoostClassifier(**params)
+    model.fit(x_train, y_train, cat_features=CAT_COLUMNS)
+    return model
+
+
 def fit_count_expert(x_train, y_train, args, seed, two_strike):
     """Fit a CatBoost specialist for one side of the two-strike gate."""
     mask = x_train["two_strike"].to_numpy() == int(two_strike)
@@ -174,18 +189,18 @@ def optimize_segment_blends(y, years, matrix, two_strike_gate):
     for label, gate_value in (("other", False), ("two_strike", True)):
         mask = (years == latest_year) & (two_strike_gate == gate_value)
         target = y[mask]
-        predictions = matrix[mask][:, [2, 4]]
+        predictions = matrix[mask][:, SEGMENT_MODEL_INDICES]
         reference = float(target.mean() * (1.0 - target.mean()))
 
         def objective(z):
-            pred = np.clip(z[2] + z[3] * (predictions @ z[:2]), .005, .995)
-            penalty = .005 * z[2]**2 + .002 * (z[3] - 1.0)**2
+            pred = np.clip(z[3] + z[4] * (predictions @ z[:3]), .005, .995)
+            penalty = .005 * z[3]**2 + .002 * (z[4] - 1.0)**2
             return float(brier(target, pred) / reference + penalty)
 
         result = minimize(
-            objective, np.array([.7, .3, 0., 1.]), method="SLSQP",
-            bounds=[(0,1),(0,1),(-.08,.08),(.75,1.25)],
-            constraints={"type":"eq", "fun":lambda z: z[:2].sum()-1},
+            objective, np.array([.45, .35, .20, 0., 1.]), method="SLSQP",
+            bounds=[(0,1),(0,1),(0,1),(-.08,.08),(.75,1.25)],
+            constraints={"type":"eq", "fun":lambda z: z[:3].sum()-1},
             options={"maxiter":500, "ftol":1e-12},
         )
         if not result.success:
@@ -196,11 +211,13 @@ def optimize_segment_blends(y, years, matrix, two_strike_gate):
 
 def apply_segment_blends(matrix, two_strike_gate, parameters):
     prediction = np.empty(len(matrix), dtype=np.float64)
-    pair = matrix[:, [2, 4]]
+    candidates = matrix[:, SEGMENT_MODEL_INDICES]
     for label, gate_value in (("other", False), ("two_strike", True)):
         mask = two_strike_gate == gate_value
         z = parameters[label]
-        prediction[mask] = np.clip(z[2] + z[3] * (pair[mask] @ z[:2]), .005, .995)
+        prediction[mask] = np.clip(
+            z[3] + z[4] * (candidates[mask] @ z[:3]), .005, .995
+        )
     return prediction
 
 
@@ -244,6 +261,11 @@ def main() -> None:
                 predict_count_expert(other, two_strike, x.loc[va])
             )
         predictions.append(np.mean(expert_predictions, axis=0))
+        categorical_predictions = []
+        for seed in (62, 63, 64):
+            categorical = fit_categorical_cat(x.loc[tr], y[tr], args, seed)
+            categorical_predictions.append(categorical.predict_proba(x.loc[va])[:, 1])
+        predictions.append(np.mean(categorical_predictions, axis=0))
         matrix = np.column_stack(predictions)
         component_reports[str(valid_year)] = {
             name: {"brier": brier(y[va], matrix[:, i]), "bss": bss(y[va], matrix[:, i])}
@@ -257,7 +279,7 @@ def main() -> None:
     oof_year = np.concatenate(fold_years); oof_gate = np.concatenate(fold_gates)
     segment_parameters = optimize_segment_blends(oof_y, oof_year, oof, oof_gate)
     blended = apply_segment_blends(oof, oof_gate, segment_parameters)
-    weights = np.array([0., 0., 1., 0., 0.])
+    weights = np.array([0., 0., 1., 0., 0., 0.])
     intercept, slope = 0., 1.
     reports = {}
     for year in (2023, 2024):
@@ -268,7 +290,7 @@ def main() -> None:
     print("OOF:", reports)
     diagnostics = Path(args.diagnostic_dir); diagnostics.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
-        diagnostics / "v8_oof_predictions.npz", predictions=oof,
+        diagnostics / "v9_oof_predictions.npz", predictions=oof,
         target=oof_y, season=oof_year, model_names=np.asarray(MODEL_NAMES),
         two_strike=oof_gate, blended=blended,
     )
@@ -292,15 +314,22 @@ def main() -> None:
             expert = CatBoostClassifier(**cat_params(args, cat_rounds, seed))
             expert.fit(x.loc[mask], y[mask])
             expert.save_model(str(out / f"catboost_{label}_{index}.cbm"))
+    for index, seed in enumerate((62, 63, 64)):
+        categorical = CatBoostClassifier(**{
+            **cat_params(args, cat_rounds, seed),
+            "max_ctr_complexity": 1, "one_hot_max_size": 32,
+        })
+        categorical.fit(x, y, cat_features=CAT_COLUMNS)
+        categorical.save_model(str(out / f"catboost_categorical_{index}.cbm"))
 
     metadata = {
-        "version":"v8_segment_calibrated_mixture", "feature_columns":x.columns.tolist(),
+        "version":"v9_categorical_diversity", "feature_columns":x.columns.tolist(),
         "cat_features":[], "history":asdict(build_end_history(raw, y_series)),
         "model_names":MODEL_NAMES, "blend_weights":dict(zip(MODEL_NAMES, weights.tolist())),
         "calibration":{"intercept":intercept, "slope":slope}, "clip":[.005,.995],
         "segment_blends": {
-            key: {"global_weight":float(value[0]), "expert_weight":float(value[1]),
-                  "intercept":float(value[2]), "slope":float(value[3])}
+            key: {"weights":dict(zip(SEGMENT_MODEL_NAMES, value[:3].tolist())),
+                  "intercept":float(value[3]), "slope":float(value[4])}
             for key, value in segment_parameters.items()
         },
         "training_info":{"lgb_rounds":lgb_rounds, "catboost_rounds":cat_rounds,
@@ -308,6 +337,6 @@ def main() -> None:
                          "rolling_reports":reports, "elapsed_seconds":time.time()-started},
     }
     (out / "metadata.json").write_text(json.dumps(metadata, ensure_ascii=False), encoding="utf-8")
-    print(f"Saved v8 artifacts to {out}; diagnostics={diagnostics}; elapsed={time.time()-started:.1f}s")
+    print(f"Saved v9 artifacts to {out}; diagnostics={diagnostics}; elapsed={time.time()-started:.1f}s")
 
 if __name__ == "__main__": main()

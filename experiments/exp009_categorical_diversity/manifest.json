@@ -1,0 +1,17 @@
+{
+  "experiment_id": "exp009_categorical_diversity",
+  "owner": "JunseoPark543",
+  "branch": "experiment/junseo-catboost-gpu",
+  "status": "implemented_not_trained",
+  "model": "segment mixtures augmented with 3-seed native-categorical CatBoost",
+  "feature_version": "feature_engineering.py:v4-state-batched",
+  "train_entrypoint": "train_bss_ensemble.py",
+  "inference_entrypoint": "submit/script.py",
+  "train_seasons": [2019, 2020, 2021, 2022, 2023, 2024],
+  "validation_seasons": [2023, 2024],
+  "seed": 20260826,
+  "metrics": {"bss_2023": null, "bss_2024": null, "public_score": null},
+  "artifacts": ["submit/model/metadata.json", "outputs/v9_oof_predictions.npz", "submission_v9.zip"],
+  "reproduce": "bash run_v9.sh 0",
+  "notes": "Tests CatBoost ordered categorical statistics as an optional diversity model; segment simplex optimization assigns it zero weight unless it improves latest-fold Brier score."
+}

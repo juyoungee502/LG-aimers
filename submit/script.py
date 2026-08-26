@@ -228,6 +228,7 @@ def main():
         "catboost": [],
         "count_other": [],
         "count_two_strike": [],
+        "categorical_catboost": [],
     }
     for index in range(3):
         model = CatBoostClassifier()
@@ -237,6 +238,9 @@ def main():
             expert = CatBoostClassifier()
             expert.load_model(os.path.join(model_dir, f"catboost_{label}_{index}.cbm"))
             models[key].append(expert)
+        categorical = CatBoostClassifier()
+        categorical.load_model(os.path.join(model_dir, f"catboost_categorical_{index}.cbm"))
+        models["categorical_catboost"].append(categorical)
     print("Model version:", bundle["version"])
     test = pd.read_csv(test_path, encoding="utf-8-sig")
     if ID_COL not in test.columns or test[ID_COL].duplicated().any():
@@ -263,13 +267,19 @@ def main():
             model.predict_proba(features.loc[two_strike_gate])[:, 1]
             for model in models["count_two_strike"]
         ], axis=0)
+    categorical_prediction = np.mean([
+        model.predict_proba(features)[:, 1]
+        for model in models["categorical_catboost"]
+    ], axis=0)
     prediction = np.empty(len(features), dtype=np.float64)
     for label, gate_value in (("other", False), ("two_strike", True)):
         mask = two_strike_gate == gate_value
         params = bundle["segment_blends"][label]
+        segment_weights = params["weights"]
         raw_prediction = (
-            params["global_weight"] * cat_prediction[mask]
-            + params["expert_weight"] * count_prediction[mask]
+            segment_weights["catboost"] * cat_prediction[mask]
+            + segment_weights["count_expert"] * count_prediction[mask]
+            + segment_weights["categorical_catboost"] * categorical_prediction[mask]
         )
         prediction[mask] = params["intercept"] + params["slope"] * raw_prediction
     prediction = np.clip(prediction, *bundle["clip"])

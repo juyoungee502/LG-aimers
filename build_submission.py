@@ -10,6 +10,7 @@ REQUIRED_MODELS = (
     "catboost_0.cbm", "catboost_1.cbm", "catboost_2.cbm",
     "catboost_other_0.cbm", "catboost_other_1.cbm", "catboost_other_2.cbm",
     "catboost_two_strike_0.cbm", "catboost_two_strike_1.cbm", "catboost_two_strike_2.cbm",
+    "catboost_categorical_0.cbm", "catboost_categorical_1.cbm", "catboost_categorical_2.cbm",
 )
 
 def main():
@@ -21,7 +22,7 @@ def main():
     missing = [str(path) for path in required if not path.is_file()]
     if missing: raise FileNotFoundError(f"Missing submission files: {missing}")
     metadata = json.loads((root / "model" / "metadata.json").read_text(encoding="utf-8"))
-    if metadata.get("version") != "v8_segment_calibrated_mixture":
+    if metadata.get("version") != "v9_categorical_diversity":
         raise ValueError(f"Unexpected model version: {metadata.get('version')}")
     output = Path(args.output)
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
