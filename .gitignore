@@ -9,6 +9,7 @@ models/
 model/
 submit/model/
 outputs/
+research/
 submissions/
 *.pt
 *.pth
