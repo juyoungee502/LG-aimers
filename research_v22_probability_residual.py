@@ -214,7 +214,7 @@ def main():
              for label, block in blocks.items()}
     total_gains = {label: 0. for label in blocks}
     remaining, selected = dict(best), []
-    for step in range(12):
+    for step in range(24):
         winner = None
         for key, config in remaining.items():
             scale = float(config["scale"])
