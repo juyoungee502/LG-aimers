@@ -1,0 +1,17 @@
+{
+  "experiment_id": "exp008_segment_calibrated_mixture",
+  "owner": "JunseoPark543",
+  "branch": "experiment/junseo-catboost-gpu",
+  "status": "implemented_not_trained",
+  "model": "independently calibrated two-strike and non-two-strike global/specialist mixtures",
+  "feature_version": "feature_engineering.py:v4-state-batched",
+  "train_entrypoint": "train_bss_ensemble.py",
+  "inference_entrypoint": "submit/script.py",
+  "train_seasons": [2019, 2020, 2021, 2022, 2023, 2024],
+  "validation_seasons": [2023, 2024],
+  "seed": 20260826,
+  "metrics": {"estimated_bss_2024_from_v7_oof": 905.21, "public_score": null},
+  "artifacts": ["submit/model/metadata.json", "outputs/v8_oof_predictions.npz", "submission_v8.zip"],
+  "reproduce": "bash run_v8.sh 0",
+  "notes": "V7 OOF selected 87.34% specialist outside two strikes and 0% specialist at two strikes; independent segment calibration raises replayed 2024 OOF from 894.94 to 905.21."
+}

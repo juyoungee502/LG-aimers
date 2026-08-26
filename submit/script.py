@@ -248,7 +248,6 @@ def main():
     if list(features.columns) != bundle["feature_columns"]:
         raise ValueError("Final feature order differs from training")
 
-    weights = bundle["blend_weights"]
     cat_prediction = np.mean(
         [model.predict_proba(features)[:, 1] for model in models["catboost"]], axis=0
     )
@@ -264,17 +263,15 @@ def main():
             model.predict_proba(features.loc[two_strike_gate])[:, 1]
             for model in models["count_two_strike"]
         ], axis=0)
-    prediction = (
-        weights["lgb_a"] * models["lgb_a"].predict(features)
-        + weights["lgb_b"] * models["lgb_b"].predict(features)
-        + weights["catboost"] * cat_prediction
-        + weights["history_expert"] * history_expert(
-            features, bundle["history"]["global_prior"]
+    prediction = np.empty(len(features), dtype=np.float64)
+    for label, gate_value in (("other", False), ("two_strike", True)):
+        mask = two_strike_gate == gate_value
+        params = bundle["segment_blends"][label]
+        raw_prediction = (
+            params["global_weight"] * cat_prediction[mask]
+            + params["expert_weight"] * count_prediction[mask]
         )
-        + weights["count_expert"] * count_prediction
-    )
-    calibration = bundle["calibration"]
-    prediction = calibration["intercept"] + calibration["slope"] * prediction
+        prediction[mask] = params["intercept"] + params["slope"] * raw_prediction
     prediction = np.clip(prediction, *bundle["clip"])
     if len(prediction) != len(test) or not np.isfinite(prediction).all():
         raise ValueError("Invalid prediction length or non-finite prediction")

@@ -23,26 +23,26 @@ python train.py --preset full --task-type GPU --devices 0
 For multiple GPUs, CatBoost accepts values such as `--devices 0:1` or
 `--devices 0-3`.
 
-## Recommended BSS ensemble (v7)
+## Recommended BSS ensemble (v8)
 
 The competition model is trained with rolling 2023/2024 validation and directly
 selects the blend by normalized Brier score:
 
 ```bash
-bash run_v7.sh 0
+bash run_v8.sh 0
 ```
 
-The one-command runner trains the model, builds `submission_v7.zip`, saves the
+The one-command runner trains the model, builds `submission_v8.zip`, saves the
 training log and OOF diagnostics, and bundles all three as
-`outputs/results_v7.zip`. The argument is the CatBoost GPU device specification;
-for example, use `bash run_v7.sh 0:1` for GPUs 0 and 1.
+`outputs/results_v8.zip`. The argument is the CatBoost GPU device specification;
+for example, use `bash run_v8.sh 0:1` for GPUs 0 and 1.
 
 The trainer writes native LightGBM/CatBoost models and JSON metadata under
-`submit/model/`. V7 retains the global three-seed CatBoost and adds separate
+`submit/model/`. V8 retains the global three-seed CatBoost and separate
 three-seed specialists for two-strike and non-two-strike rows. Latest-fold blend
-selection can reject the specialists entirely, so an unsuccessful experiment
-falls back to the v6 global CatBoost. Raw OOF predictions are saved to
-`outputs/v7_oof_predictions.npz` for the next analysis cycle.
+selection and calibration are independent for each count segment, allowing the
+two-strike segment to reject its weaker specialist. Raw OOF predictions are saved
+to `outputs/v8_oof_predictions.npz` for the next analysis cycle.
 The builder checks the model version and expected file layout before producing
 the ZIP.
 

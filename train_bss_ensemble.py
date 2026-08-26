@@ -167,6 +167,43 @@ def optimize_blend(y, years, matrix):
     return result.x
 
 
+def optimize_segment_blends(y, years, matrix, two_strike_gate):
+    """Fit independent global/specialist blends for each pre-pitch segment."""
+    latest_year = np.max(years)
+    parameters = {}
+    for label, gate_value in (("other", False), ("two_strike", True)):
+        mask = (years == latest_year) & (two_strike_gate == gate_value)
+        target = y[mask]
+        predictions = matrix[mask][:, [2, 4]]
+        reference = float(target.mean() * (1.0 - target.mean()))
+
+        def objective(z):
+            pred = np.clip(z[2] + z[3] * (predictions @ z[:2]), .005, .995)
+            penalty = .005 * z[2]**2 + .002 * (z[3] - 1.0)**2
+            return float(brier(target, pred) / reference + penalty)
+
+        result = minimize(
+            objective, np.array([.7, .3, 0., 1.]), method="SLSQP",
+            bounds=[(0,1),(0,1),(-.08,.08),(.75,1.25)],
+            constraints={"type":"eq", "fun":lambda z: z[:2].sum()-1},
+            options={"maxiter":500, "ftol":1e-12},
+        )
+        if not result.success:
+            raise RuntimeError(f"{label} blend optimization failed: {result.message}")
+        parameters[label] = result.x
+    return parameters
+
+
+def apply_segment_blends(matrix, two_strike_gate, parameters):
+    prediction = np.empty(len(matrix), dtype=np.float64)
+    pair = matrix[:, [2, 4]]
+    for label, gate_value in (("other", False), ("two_strike", True)):
+        mask = two_strike_gate == gate_value
+        z = parameters[label]
+        prediction[mask] = np.clip(z[2] + z[3] * (pair[mask] @ z[:2]), .005, .995)
+    return prediction
+
+
 def main() -> None:
     args = arguments(); started = time.time(); out = Path(args.output_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -181,7 +218,7 @@ def main() -> None:
     for col in CAT_COLUMNS: x[col] = x[col].fillna(-1).astype(np.int32)
     years = raw["season"].to_numpy(np.int16)
 
-    fold_predictions, fold_targets, fold_years = [], [], []
+    fold_predictions, fold_targets, fold_years, fold_gates = [], [], [], []
     component_reports = {}
     best_lgb = [[], []]
     for valid_year in (2023, 2024):
@@ -214,23 +251,26 @@ def main() -> None:
         }
         print(component_reports[str(valid_year)])
         fold_predictions.append(matrix); fold_targets.append(y[va]); fold_years.append(years[va])
+        fold_gates.append(x.loc[va, "two_strike"].to_numpy().astype(bool))
 
     oof = np.vstack(fold_predictions); oof_y = np.concatenate(fold_targets)
-    oof_year = np.concatenate(fold_years); z = optimize_blend(oof_y, oof_year, oof)
-    weights = z[:len(MODEL_NAMES)]
-    intercept, slope = float(z[len(MODEL_NAMES)]), float(z[len(MODEL_NAMES) + 1])
-    blended = np.clip(intercept + slope * (oof @ weights), .005, .995)
+    oof_year = np.concatenate(fold_years); oof_gate = np.concatenate(fold_gates)
+    segment_parameters = optimize_segment_blends(oof_y, oof_year, oof, oof_gate)
+    blended = apply_segment_blends(oof, oof_gate, segment_parameters)
+    weights = np.array([0., 0., 1., 0., 0.])
+    intercept, slope = 0., 1.
     reports = {}
     for year in (2023, 2024):
         m = oof_year == year
         reports[str(year)] = {"brier": brier(oof_y[m], blended[m]), "bss": bss(oof_y[m], blended[m]),
                               "target_rate": float(oof_y[m].mean()), "prediction_mean": float(blended[m].mean())}
-    print("Blend weights:", dict(zip(MODEL_NAMES, weights))); print("OOF:", reports)
+    print("Segment blends:", {k: v.tolist() for k, v in segment_parameters.items()})
+    print("OOF:", reports)
     diagnostics = Path(args.diagnostic_dir); diagnostics.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
-        diagnostics / "v7_oof_predictions.npz", predictions=oof,
+        diagnostics / "v8_oof_predictions.npz", predictions=oof,
         target=oof_y, season=oof_year, model_names=np.asarray(MODEL_NAMES),
-        blended=blended,
+        two_strike=oof_gate, blended=blended,
     )
 
     lgb_rounds = [max(50, int(round(np.median(v)*1.05))) for v in best_lgb]
@@ -254,15 +294,20 @@ def main() -> None:
             expert.save_model(str(out / f"catboost_{label}_{index}.cbm"))
 
     metadata = {
-        "version":"v7_count_mixture", "feature_columns":x.columns.tolist(),
+        "version":"v8_segment_calibrated_mixture", "feature_columns":x.columns.tolist(),
         "cat_features":[], "history":asdict(build_end_history(raw, y_series)),
         "model_names":MODEL_NAMES, "blend_weights":dict(zip(MODEL_NAMES, weights.tolist())),
         "calibration":{"intercept":intercept, "slope":slope}, "clip":[.005,.995],
+        "segment_blends": {
+            key: {"global_weight":float(value[0]), "expert_weight":float(value[1]),
+                  "intercept":float(value[2]), "slope":float(value[3])}
+            for key, value in segment_parameters.items()
+        },
         "training_info":{"lgb_rounds":lgb_rounds, "catboost_rounds":cat_rounds,
                          "component_reports":component_reports,
                          "rolling_reports":reports, "elapsed_seconds":time.time()-started},
     }
     (out / "metadata.json").write_text(json.dumps(metadata, ensure_ascii=False), encoding="utf-8")
-    print(f"Saved v7 artifacts to {out}; diagnostics={diagnostics}; elapsed={time.time()-started:.1f}s")
+    print(f"Saved v8 artifacts to {out}; diagnostics={diagnostics}; elapsed={time.time()-started:.1f}s")
 
 if __name__ == "__main__": main()

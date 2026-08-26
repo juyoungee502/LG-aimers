@@ -2,7 +2,7 @@
   "experiment_id": "exp007_count_mixture",
   "owner": "JunseoPark543",
   "branch": "experiment/junseo-catboost-gpu",
-  "status": "implemented_not_trained",
+  "status": "superseded_by_v8",
   "model": "global 3-seed CatBoost plus gated 3-seed two-strike/non-two-strike specialists",
   "feature_version": "feature_engineering.py:v4-state-batched",
   "train_entrypoint": "train_bss_ensemble.py",
@@ -10,8 +10,8 @@
   "train_seasons": [2019, 2020, 2021, 2022, 2023, 2024],
   "validation_seasons": [2023, 2024],
   "seed": 20260826,
-  "metrics": {"bss_2023": null, "bss_2024": null, "public_score": null},
+  "metrics": {"bss_2023": 0.0, "raw_bss_2023": -439.82, "bss_2024": 894.94, "public_score": null},
   "artifacts": ["submit/model/metadata.json", "outputs/v7_oof_predictions.npz", "submission_v7.zip"],
   "reproduce": "bash run_v7.sh 0",
-  "notes": "A hard pre-pitch two-strike gate routes rows to specialist CatBoost ensembles; constrained latest-fold blending can assign the specialist zero weight if it does not improve the global model."
+  "notes": "The global 32% specialist weight improved non-two-strike rows but hurt two-strike rows; v8 learns independent segment blends and calibration."
 }
