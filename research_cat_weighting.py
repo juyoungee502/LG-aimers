@@ -32,6 +32,11 @@ def arguments():
     parser.add_argument("--task-type", choices=("CPU", "GPU"), default="GPU")
     parser.add_argument("--devices", default="0")
     parser.add_argument("--threads", type=int, default=-1)
+    parser.add_argument("--validation-year", type=int, default=2024)
+    parser.add_argument(
+        "--policies", default="all",
+        help="Comma-separated policy names, or 'all'.",
+    )
     return parser.parse_args()
 
 
@@ -42,15 +47,15 @@ def bss(y, prediction):
     )
 
 
-def policies(seasons):
-    age = 2023 - seasons.astype(np.float64)
+def policies(seasons, reference_year):
+    age = reference_year - seasons.astype(np.float64)
     result = {"uniform": np.ones(len(seasons), np.float32)}
     for half_life in (10., 5., 3., 2., 1.):
         result[f"half_life_{half_life:g}"] = np.exp(-np.log(2.) * age / half_life).astype(np.float32)
     for multiplier in (.0, .25, .5, 1.5):
         weight = np.ones(len(seasons), np.float32)
-        weight[seasons == 2023] = multiplier
-        result[f"season_2023_x{multiplier:g}"] = weight
+        weight[seasons == reference_year] = multiplier
+        result[f"season_latest_x{multiplier:g}"] = weight
     return result
 
 
@@ -67,10 +72,17 @@ def main():
         features[column] = features[column].fillna(-1).astype(np.int32)
 
     season = raw["season"].to_numpy(np.int16)
-    train_mask, valid_mask = season < 2024, season == 2024
+    train_mask = season < args.validation_year
+    valid_mask = season == args.validation_year
     x_train, x_valid = features.loc[train_mask], features.loc[valid_mask]
     y_train, y_valid = target[train_mask], target[valid_mask]
-    settings = policies(season[train_mask])
+    settings = policies(season[train_mask], args.validation_year - 1)
+    if args.policies != "all":
+        selected = {value.strip() for value in args.policies.split(",") if value.strip()}
+        unknown = selected.difference(settings)
+        if unknown:
+            raise ValueError(f"Unknown policies: {sorted(unknown)}")
+        settings = {name: settings[name] for name in settings if name in selected}
     names, matrices, reports = [], [], {}
     for name, weight in settings.items():
         seed_predictions = []

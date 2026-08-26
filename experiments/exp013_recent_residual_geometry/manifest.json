@@ -1,0 +1,27 @@
+{
+  "id": "exp013_recent_residual_geometry",
+  "version": "v13",
+  "status": "candidate",
+  "parent": "exp012_transferred_residual_effects",
+  "changes": [
+    "Use only the latest 2024 strictly OOF residuals for production lookup tables",
+    "Reshape batter main effects along a normalized k=500 direction with step -3",
+    "Add orthogonal batter exposure 0.40, batter log-exposure 0.16, and pitcher exposure 0.50"
+  ],
+  "validation": {
+    "protocol": "fit blend/effects on prior season and apply to next season",
+    "recent_source_window_advantage": {
+      "2022": 3.573,
+      "2023": 12.892,
+      "2024": 5.181
+    },
+    "geometry_delta": {
+      "2021": 34.818,
+      "2022": -26.406,
+      "2023": 6.329,
+      "2024": 6.656
+    },
+    "public_method_evidence": "Player residual-table shape/exposure axes independently improved the public reference implementation from 1076.22 to 1098.36 before final composition."
+  },
+  "public_score": null
+}

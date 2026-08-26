@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-VERSION="v12"
+VERSION="v13"
 LOG_FILE="training_${VERSION}.log"
 SUBMISSION_FILE="submission_${VERSION}.zip"
 RESULT_DIR="outputs"
@@ -13,10 +13,10 @@ if [[ ! -f data/train.csv ]]; then
     exit 1
 fi
 {
-    echo "[$(date '+%F %T')] Upgrading trained v11 artifacts to ${VERSION}"
-    python upgrade_v11_to_v12.py
+    echo "[$(date '+%F %T')] Upgrading trained v12 artifacts to ${VERSION}"
+    python upgrade_v12_to_v13.py
     python build_submission.py --output "$SUBMISSION_FILE" \
-        --expected-version v12_transferred_residual_effects
+        --expected-version v13_recent_residual_geometry
     echo "[$(date '+%F %T')] Upgrade and submission build completed"
 } 2>&1 | tee "$LOG_FILE"
 python - "$SUBMISSION_FILE" "$LOG_FILE" "$OOF_FILE" "$RESULT_BUNDLE" <<'PY'

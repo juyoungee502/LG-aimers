@@ -1,4 +1,4 @@
-"""Validate v3 artifacts and build the code-submission ZIP."""
+"""Validate trained artifacts and build the code-submission ZIP."""
 from __future__ import annotations
 import argparse
 import json
@@ -20,6 +20,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--submit-dir", default="submit")
     p.add_argument("--output", default="submission_v3.zip")
+    p.add_argument("--expected-version", default="v13_recent_residual_geometry")
     args = p.parse_args(); root = Path(args.submit_dir)
     required = [
         root / "script.py", root / "requirements.txt", Path("feature_engineering.py"),
@@ -28,7 +29,7 @@ def main():
     missing = [str(path) for path in required if not path.is_file()]
     if missing: raise FileNotFoundError(f"Missing submission files: {missing}")
     metadata = json.loads((root / "model" / "metadata.json").read_text(encoding="utf-8"))
-    if metadata.get("version") != "v12_transferred_residual_effects":
+    if metadata.get("version") != args.expected_version:
         raise ValueError(f"Unexpected model version: {metadata.get('version')}")
     output = Path(args.output)
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
