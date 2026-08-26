@@ -229,6 +229,8 @@ def main():
         "count_other": [],
         "count_two_strike": [],
         "categorical_catboost": [],
+        "categorical_count_other": [],
+        "categorical_count_two_strike": [],
     }
     for index in range(3):
         model = CatBoostClassifier()
@@ -241,6 +243,15 @@ def main():
         categorical = CatBoostClassifier()
         categorical.load_model(os.path.join(model_dir, f"catboost_categorical_{index}.cbm"))
         models["categorical_catboost"].append(categorical)
+        for label, key in (
+            ("other", "categorical_count_other"),
+            ("two_strike", "categorical_count_two_strike"),
+        ):
+            categorical_expert = CatBoostClassifier()
+            categorical_expert.load_model(
+                os.path.join(model_dir, f"catboost_categorical_{label}_{index}.cbm")
+            )
+            models[key].append(categorical_expert)
     print("Model version:", bundle["version"])
     test = pd.read_csv(test_path, encoding="utf-8-sig")
     if ID_COL not in test.columns or test[ID_COL].duplicated().any():
@@ -271,6 +282,17 @@ def main():
         model.predict_proba(features)[:, 1]
         for model in models["categorical_catboost"]
     ], axis=0)
+    categorical_count_prediction = np.empty(len(features), dtype=np.float64)
+    for label, gate_value, key in (
+        ("other", False, "categorical_count_other"),
+        ("two_strike", True, "categorical_count_two_strike"),
+    ):
+        mask = two_strike_gate == gate_value
+        if mask.any():
+            categorical_count_prediction[mask] = np.mean([
+                model.predict_proba(features.loc[mask])[:, 1]
+                for model in models[key]
+            ], axis=0)
     prediction = np.empty(len(features), dtype=np.float64)
     for label, gate_value in (("other", False), ("two_strike", True)):
         mask = two_strike_gate == gate_value
@@ -280,6 +302,8 @@ def main():
             segment_weights["catboost"] * cat_prediction[mask]
             + segment_weights["count_expert"] * count_prediction[mask]
             + segment_weights["categorical_catboost"] * categorical_prediction[mask]
+            + segment_weights["categorical_count_expert"]
+            * categorical_count_prediction[mask]
         )
         prediction[mask] = params["intercept"] + params["slope"] * raw_prediction
     prediction = np.clip(prediction, *bundle["clip"])
