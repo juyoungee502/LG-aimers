@@ -29,6 +29,8 @@ def _shape(prediction, name):
         return p * (1. - p)
     if name == "quadratic":
         return (p - .5) ** 2
+    if name == "linear":
+        return p - .5
     raise ValueError(f"Unknown probability residual shape: {name}")
 
 

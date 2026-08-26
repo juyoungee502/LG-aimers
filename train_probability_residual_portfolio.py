@@ -16,16 +16,19 @@ from train_robust_residual_portfolio import freeze as freeze_v21
 
 
 SELECTED = (
-    ("uncertainty", "regular_count_2", 1.00),
-    ("uncertainty", "regular_count_3", .25),
-    ("quadratic", "regular_count_2", 1.00),
+    ("uncertainty", "regular_count_2", .75),
     ("quadratic", "regular_count_3", .25),
     ("constant", "regular_count_9", .25),
-    ("uncertainty", "regular_runners_1", .25),
-    ("uncertainty", "regular_runners_2", .25),
-    ("quadratic", "regular_runners_1", .25),
+    ("uncertainty", "regular_count_3", .25),
     ("uncertainty", "regular_count_5", .25),
+    ("quadratic", "regular_runners_2", .25),
     ("quadratic", "regular_count_5", .25),
+    ("uncertainty", "regular_runners_2", .25),
+    ("uncertainty", "regular_count_4", .25),
+    ("quadratic", "regular_count_4", .25),
+    ("quadratic", "regular_count_2", .75),
+    ("uncertainty", "regular_count_11", .25),
+    ("linear", "regular_count_9", .25),
 )
 
 
@@ -54,6 +57,8 @@ def shape(prediction, name):
         return p * (1. - p)
     if name == "quadratic":
         return (p - .5) ** 2
+    if name == "linear":
+        return p - .5
     raise ValueError(name)
 
 
@@ -119,7 +124,7 @@ def main():
         ],
         "validation_effects": validation_config["effects"],
     }
-    if report["v23_bss"] < 987.6 or min(report["gain"], *report["quarter_gains"]) <= 0.:
+    if report["v23_bss"] < 989.5 or min(report["gain"], *report["quarter_gains"]) <= 0.:
         raise RuntimeError(f"Probability portfolio failed promotion: {report}")
     print(f"v23 validation: {json.dumps(report)}", flush=True)
 
