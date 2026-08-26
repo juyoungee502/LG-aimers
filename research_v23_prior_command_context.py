@@ -37,7 +37,9 @@ def sigmoid(value):
     return 1.0 / (1.0 + np.exp(-np.clip(value, -30.0, 30.0)))
 
 
-def prior_command_features(rows: pd.DataFrame, target: np.ndarray) -> pd.DataFrame:
+def prior_command_features(
+    rows: pd.DataFrame, target: np.ndarray, history_window: int | None = None,
+) -> pd.DataFrame:
     """Use only seasons before each row's season to build pitcher context rates."""
     work = rows[["season", "pitcher_id", "batter_hand", "balls_before", "strikes_before"]].copy()
     work["count_state"] = (
@@ -48,7 +50,10 @@ def prior_command_features(rows: pd.DataFrame, target: np.ndarray) -> pd.DataFra
     for season in np.sort(work["season"].unique()):
         query = work.loc[work["season"].eq(season)].drop(columns=["_target"]).copy()
         query["_order"] = query.index
-        source = work.loc[work["season"].lt(season)]
+        source_mask = work["season"].lt(season)
+        if history_window is not None:
+            source_mask &= work["season"].ge(season - history_window)
+        source = work.loc[source_mask]
         global_rate = float(source["_target"].mean()) if len(source) else .5
         pitcher = source.groupby("pitcher_id", observed=True)["_target"].agg(
             pitcher_sum="sum", pitcher_n="count",
@@ -125,6 +130,7 @@ def segment_gains(target, base, candidate, rows):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--valid-year", type=int, required=True, choices=(2023, 2024))
+    parser.add_argument("--history-window", type=int, default=0)
     args = parser.parse_args()
     root = Path(__file__).resolve().parent
     data = pd.read_csv(
@@ -142,7 +148,8 @@ def main():
     mapping, _ = pitcher_mapping(root, data, trackman)
     trackman = prepare_trackman(trackman, mapping)
     trackman_features = attach_context(data, trackman)
-    command_features = prior_command_features(data, target)
+    history_window = args.history_window or None
+    command_features = prior_command_features(data, target, history_window)
     bases = training_history_arrays(data, target_series)
     features = engineer_features(data, *bases, global_prior=float(target.mean()))
     add_training_component_features(features, data)
@@ -196,7 +203,10 @@ def main():
     reports.sort(
         key=lambda row: (row["min_half"], row["gains"]["all"]), reverse=True,
     )
-    output = root / "research" / f"v23_prior_command_context_{args.valid_year}.npz"
+    suffix = f"_w{args.history_window}" if args.history_window else ""
+    output = root / "research" / (
+        f"v23_prior_command_context_{args.valid_year}{suffix}.npz"
+    )
     np.savez_compressed(
         output, target=y.astype(np.float32), base=base.astype(np.float32),
         prediction=prediction.astype(np.float32),
@@ -206,7 +216,8 @@ def main():
     )
     exact = [row for row in reports if abs(row["scale"] - 1.0) < 1e-8]
     print(json.dumps({
-        "valid_year": args.valid_year, "feature_count": features.shape[1],
+        "valid_year": args.valid_year, "history_window": history_window,
+        "feature_count": features.shape[1],
         "exact": exact, "top": reports[:30],
     }, indent=2), flush=True)
     print(f"Saved {output}", flush=True)
