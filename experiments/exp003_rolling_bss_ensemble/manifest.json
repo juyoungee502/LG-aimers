@@ -2,7 +2,7 @@
   "experiment_id": "exp003_rolling_bss_ensemble",
   "owner": "JunseoPark543",
   "branch": "experiment/junseo-catboost-gpu",
-  "status": "implemented_not_trained",
+  "status": "superseded_by_v4",
   "model": "2x LightGBM + GPU CatBoost + as-of history expert",
   "feature_version": "feature_engineering.py:v2",
   "train_entrypoint": "train_bss_ensemble.py",

@@ -16,8 +16,8 @@ from catboost import CatBoostClassifier
 from scipy.optimize import minimize
 
 from feature_engineering import (
-    ID_COL, TARGET_COL, build_end_history, engineer_features,
-    training_history_arrays,
+    ID_COL, TARGET_COL, add_state_interactions, add_training_component_features,
+    build_end_history, engineer_features, training_history_arrays,
 )
 
 CAT_COLUMNS = [
@@ -102,23 +102,24 @@ def fit_lgb(x_train, y_train, x_valid, y_valid, weights, variant, args):
     )
 
 
-def cat_params(args, iterations):
+def cat_params(args, iterations, seed):
     p = dict(
-        iterations=iterations, learning_rate=.035, depth=7,
-        loss_function="Logloss", eval_metric="BrierScore", l2_leaf_reg=14.,
-        random_strength=.5, random_seed=args.seed + 701, border_count=96,
-        one_hot_max_size=16, allow_writing_files=False, verbose=50,
+        iterations=iterations, learning_rate=.02, depth=6,
+        loss_function="Logloss", eval_metric="BrierScore", l2_leaf_reg=100.,
+        random_strength=1., random_seed=seed, border_count=32,
+        allow_writing_files=False, verbose=100,
         task_type=args.task_type, thread_count=args.threads,
     )
     if args.task_type == "GPU": p["devices"] = args.devices
     return p
 
 
-def fit_cat(x_train, y_train, x_valid, y_valid, weights, args):
-    rounds = 700 if args.preset == "full" else 100
-    model = CatBoostClassifier(**cat_params(args, rounds))
-    model.fit(x_train, y_train, cat_features=CAT_COLUMNS, sample_weight=weights,
-              eval_set=(x_valid, y_valid), early_stopping_rounds=80, use_best_model=True)
+def fit_cat(x_train, y_train, x_valid, y_valid, args, seed):
+    rounds = 1200 if args.preset == "full" else 150
+    model = CatBoostClassifier(**cat_params(args, rounds, seed))
+    # IDs and categories intentionally remain numeric. On this task, official
+    # as-of rates carry safer player history than target-derived CTR features.
+    model.fit(x_train, y_train, eval_set=(x_valid, y_valid), use_best_model=False)
     return model
 
 
@@ -155,11 +156,15 @@ def main() -> None:
     print("Building time-safe features...")
     bases = training_history_arrays(raw, y_series)
     x = engineer_features(raw, *bases, global_prior=float(y.mean()))
+    add_training_component_features(x, raw)
+    add_state_interactions(x)
+    x = x.copy()  # defragment after adding many state columns
     for col in CAT_COLUMNS: x[col] = x[col].fillna(-1).astype(np.int32)
     years = raw["season"].to_numpy(np.int16)
 
     fold_predictions, fold_targets, fold_years = [], [], []
-    best_lgb = [[], []]; best_cat = []
+    component_reports = {}
+    best_lgb = [[], []]
     for valid_year in (2023, 2024):
         tr, va = years < valid_year, years == valid_year
         print(f"Rolling fold: train < {valid_year}, validate {valid_year}")
@@ -169,13 +174,18 @@ def main() -> None:
                             season_weights(raw.loc[tr, "season"], valid_year-1), variant, args)
             predictions.append(model.predict(x.loc[va], num_iteration=model.best_iteration))
             best_lgb[variant].append(model.best_iteration)
-        cat = fit_cat(x.loc[tr], y[tr], x.loc[va], y[va],
-                      season_weights(raw.loc[tr, "season"], valid_year-1), args)
-        predictions.append(cat.predict_proba(x.loc[va])[:, 1])
-        best_cat.append(cat.get_best_iteration()+1)
+        cat_predictions = []
+        for seed in (42, 43, 44):
+            cat = fit_cat(x.loc[tr], y[tr], x.loc[va], y[va], args, seed)
+            cat_predictions.append(cat.predict_proba(x.loc[va])[:, 1])
+        predictions.append(np.mean(cat_predictions, axis=0))
         predictions.append(history_expert(x.loc[va], float(y[tr].mean())))
         matrix = np.column_stack(predictions)
-        print({name: bss(y[va], matrix[:, i]) for i, name in enumerate(MODEL_NAMES)})
+        component_reports[str(valid_year)] = {
+            name: {"brier": brier(y[va], matrix[:, i]), "bss": bss(y[va], matrix[:, i])}
+            for i, name in enumerate(MODEL_NAMES)
+        }
+        print(component_reports[str(valid_year)])
         fold_predictions.append(matrix); fold_targets.append(y[va]); fold_years.append(years[va])
 
     oof = np.vstack(fold_predictions); oof_y = np.concatenate(fold_targets)
@@ -190,7 +200,7 @@ def main() -> None:
     print("Blend weights:", dict(zip(MODEL_NAMES, weights))); print("OOF:", reports)
 
     lgb_rounds = [max(50, int(round(np.median(v)*1.05))) for v in best_lgb]
-    cat_rounds = max(50, int(round(np.median(best_cat)*1.05)))
+    cat_rounds = 1320 if args.preset == "full" else 170
     final_lgb = []
     all_weights = season_weights(raw["season"], int(years.max()))
     for variant in (0,1):
@@ -198,16 +208,18 @@ def main() -> None:
         final_lgb.append(lgb.train(lgb_params(variant, args.seed+variant*97, args.threads), ds,
                                    num_boost_round=lgb_rounds[variant]))
         final_lgb[-1].save_model(str(out / f"lgb_{variant}.txt"))
-    final_cat = CatBoostClassifier(**cat_params(args, cat_rounds))
-    final_cat.fit(x, y, cat_features=CAT_COLUMNS, sample_weight=all_weights)
-    final_cat.save_model(str(out / "catboost.cbm"))
+    for index, seed in enumerate((42, 43, 44)):
+        final_cat = CatBoostClassifier(**cat_params(args, cat_rounds, seed))
+        final_cat.fit(x, y)
+        final_cat.save_model(str(out / f"catboost_{index}.cbm"))
 
     metadata = {
-        "version":"v3_rolling_bss_ensemble", "feature_columns":x.columns.tolist(),
-        "cat_features":CAT_COLUMNS, "history":asdict(build_end_history(raw, y_series)),
+        "version":"v4_state_seed_ensemble", "feature_columns":x.columns.tolist(),
+        "cat_features":[], "history":asdict(build_end_history(raw, y_series)),
         "model_names":MODEL_NAMES, "blend_weights":dict(zip(MODEL_NAMES, weights.tolist())),
         "calibration":{"intercept":intercept, "slope":slope}, "clip":[.005,.995],
         "training_info":{"lgb_rounds":lgb_rounds, "catboost_rounds":cat_rounds,
+                         "component_reports":component_reports,
                          "rolling_reports":reports, "elapsed_seconds":time.time()-started},
     }
     (out / "metadata.json").write_text(json.dumps(metadata, ensure_ascii=False), encoding="utf-8")

@@ -14,6 +14,10 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 from catboost import CatBoostClassifier
+from feature_engineering import (
+    HistoryTables, add_inference_component_features, add_state_interactions,
+    engineer_features, inference_history_arrays,
+)
 
 
 ID_COL = "row_id"
@@ -173,6 +177,35 @@ def history_expert(features, prior):
     )
 
 
+def build_features_v4(df, bundle):
+    raw = bundle["history"]
+    components = {}
+    for name, tables in raw.get("components", {}).items():
+        components[name] = {
+            key: {int(k): v for k, v in values.items()}
+            for key, values in tables.items()
+        }
+    history = HistoryTables(
+        global_prior=float(raw["global_prior"]),
+        pitcher_n={int(k): v for k, v in raw["pitcher_n"].items()},
+        pitcher_success={int(k): v for k, v in raw["pitcher_success"].items()},
+        batter_n={int(k): v for k, v in raw["batter_n"].items()},
+        batter_success={int(k): v for k, v in raw["batter_success"].items()},
+        components=components,
+    )
+    bases = inference_history_arrays(df, history)
+    out = engineer_features(df, *bases, global_prior=history.global_prior)
+    add_inference_component_features(out, df, history)
+    add_state_interactions(out)
+    out = out.copy()
+    expected = bundle["feature_columns"]
+    missing = [c for c in expected if c not in out]
+    unexpected = [c for c in out if c not in expected]
+    if missing or unexpected:
+        raise ValueError(f"Feature schema mismatch: missing={missing[:5]}, unexpected={unexpected[:5]}")
+    return out.reindex(columns=expected)
+
+
 def main():
     started = time.time()
     # The evaluation runner may execute /app/script.py while its current working
@@ -186,10 +219,6 @@ def main():
     print("Loading native models...")
     with open(metadata_path, "r", encoding="utf-8") as file:
         bundle = json.load(file)
-    for name in ("pitcher_n", "pitcher_success", "batter_n", "batter_success"):
-        bundle["history"][name] = {
-            int(key): value for key, value in bundle["history"][name].items()
-        }
     with open(os.path.join(model_dir, "lgb_0.txt"), "r", encoding="utf-8") as file:
         lgb_0_text = file.read()
     with open(os.path.join(model_dir, "lgb_1.txt"), "r", encoding="utf-8") as file:
@@ -197,25 +226,31 @@ def main():
     models = {
         "lgb_a": lgb.Booster(model_str=lgb_0_text),
         "lgb_b": lgb.Booster(model_str=lgb_1_text),
-        "catboost": CatBoostClassifier(),
+        "catboost": [],
     }
-    models["catboost"].load_model(os.path.join(model_dir, "catboost.cbm"))
+    for index in range(3):
+        model = CatBoostClassifier()
+        model.load_model(os.path.join(model_dir, f"catboost_{index}.cbm"))
+        models["catboost"].append(model)
     print("Model version:", bundle["version"])
     test = pd.read_csv(test_path, encoding="utf-8-sig")
     if ID_COL not in test.columns or test[ID_COL].duplicated().any():
         raise ValueError("test.csv must contain unique row_id values")
 
-    features = build_features(test, bundle)
+    features = build_features_v4(test, bundle)
     for col in bundle["cat_features"]:
         features[col] = features[col].fillna(-1).astype(np.int32)
     if list(features.columns) != bundle["feature_columns"]:
         raise ValueError("Final feature order differs from training")
 
     weights = bundle["blend_weights"]
+    cat_prediction = np.mean(
+        [model.predict_proba(features)[:, 1] for model in models["catboost"]], axis=0
+    )
     prediction = (
         weights["lgb_a"] * models["lgb_a"].predict(features)
         + weights["lgb_b"] * models["lgb_b"].predict(features)
-        + weights["catboost"] * models["catboost"].predict_proba(features)[:, 1]
+        + weights["catboost"] * cat_prediction
         + weights["history_expert"] * history_expert(
             features, bundle["history"]["global_prior"]
         )

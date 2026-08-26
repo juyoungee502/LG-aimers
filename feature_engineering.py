@@ -149,6 +149,44 @@ def add_inference_component_features(
         _add_component_features(out, name, n_col, rate_col, base_n, base_count)
 
 
+def add_state_interactions(out: pd.DataFrame) -> None:
+    """Add row-local interactions after seasonal component reconstruction."""
+    two_strike = (out["strikes_before"] == 2).astype(np.float32)
+    pitcher_adv = (out["strikes_before"] > out["balls_before"]).astype(np.float32)
+    runners = (out["num_runners_on"] > 0).astype(np.float32)
+    same_hand = (out["pitcher_hand"] == out["batter_hand"]).astype(np.float32)
+    ball_minus_strike = (out["balls_before"] - out["strikes_before"]).astype(np.float32)
+    if "pitcher_season_success_s100" in out:
+        success = out["pitcher_season_success_s100"]
+        out["pitcher_success_x_2strike"] = success * two_strike
+        out["pitcher_success_x_advantage"] = success * pitcher_adv
+        out["pitcher_success_x_runners"] = success * runners
+        out["pitcher_success_x_same_hand"] = success * same_hand
+        out["pitcher_success_x_ball_minus_strike"] = success * ball_minus_strike
+    for state in ("pitcher_middle", "pitcher_ball",
+                  "pitcher_reverse", "pitcher_strike"):
+        smooth = f"{state}_season_s100"
+        delta = f"{state}_season_delta"
+        if smooth in out:
+            out[f"{state}_x_2strike"] = out[smooth] * two_strike
+            out[f"{state}_x_advantage"] = out[smooth] * pitcher_adv
+            out[f"{state}_x_runners"] = out[smooth] * runners
+            out[f"{state}_x_same_hand"] = out[smooth] * same_hand
+            out[f"{state}_x_ball_minus_strike"] = out[smooth] * ball_minus_strike
+        if delta in out:
+            out[f"{state}_delta_x_2strike"] = out[delta] * two_strike
+
+    # Two-strike intent is unobserved, but a pitcher's current ball/reverse
+    # tendencies are safe pre-pitch proxies for how often they intentionally
+    # leave the zone in those counts.
+    if "pitcher_ball_season_s25" in out:
+        out["k2_ball_fast"] = out["pitcher_ball_season_s25"] * two_strike
+        out["k2_ball_stable"] = out["pitcher_ball_season_s100"] * two_strike
+    if "pitcher_reverse_season_s25" in out:
+        out["k2_reverse_fast"] = out["pitcher_reverse_season_s25"] * two_strike
+        out["k2_reverse_stable"] = out["pitcher_reverse_season_s100"] * two_strike
+
+
 def _add_component_features(
     out: pd.DataFrame,
     name: str,
