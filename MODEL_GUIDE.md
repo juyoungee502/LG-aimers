@@ -23,27 +23,29 @@ python train.py --preset full --task-type GPU --devices 0
 For multiple GPUs, CatBoost accepts values such as `--devices 0:1` or
 `--devices 0-3`.
 
-## Recommended BSS ensemble (v13)
+## Recommended BSS ensemble (v14)
 
 The competition model is trained with rolling 2023/2024 validation and directly
 selects the blend by normalized Brier score:
 
 ```bash
-bash run_v13.sh
+bash run_v14.sh
 ```
 
-The one-command runner upgrades trained v12 artifacts, builds `submission_v13.zip`, saves the
-training log and OOF diagnostics, and bundles all three as
-`outputs/results_v13.zip`. V11 must have been trained once and upgraded to v12 on the
-server; the v13 upgrade itself does not retrain the base models.
+The one-command runner trains one weighted component, upgrades v13 artifacts, builds
+`submission_v14.zip`, saves the training log and OOF diagnostics, and bundles the artifacts as
+`outputs/results_v14.zip`. V11 must have been trained once and upgraded through v13 on the
+server; v14 trains only three additional CatBoost models for final inference.
 
 The trainer writes native LightGBM/CatBoost models and JSON metadata under
-`submit/model/`. V13 keeps the empirical-Bayes main/context effects but builds final
+`submit/model/`. V14 adds a CatBoost component with a three-year sample-weight
+half-life; it improved five-block 2024 blend validation by 5.49 BSS. V13's
+empirical-Bayes main/context effects build final
 tables from the most recent 2024 OOF residuals; this beat the two-season source in
 the three latest rolling transfers. Deterministic table geometry reshapes the batter
 effect and adds player-exposure directions. The final inference remains a frozen,
 row-independent lookup using only the current row's keys. Diagnostics are saved to
-`outputs/v13_oof_predictions.npz`.
+`outputs/v14_oof_predictions.npz`.
 The builder checks the model version and expected file layout before producing
 the ZIP.
 

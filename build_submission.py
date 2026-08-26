@@ -20,12 +20,15 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--submit-dir", default="submit")
     p.add_argument("--output", default="submission_v3.zip")
-    p.add_argument("--expected-version", default="v13_recent_residual_geometry")
+    p.add_argument("--expected-version", default="v14_weighted_catboost")
     args = p.parse_args(); root = Path(args.submit_dir)
+    model_names = list(REQUIRED_MODELS)
+    if args.expected_version == "v14_weighted_catboost":
+        model_names.extend(f"catboost_weighted_{index}.cbm" for index in range(3))
     required = [
         root / "script.py", root / "requirements.txt", Path("feature_engineering.py"),
         Path("residual_effects.py"),
-    ] + [root / "model" / n for n in REQUIRED_MODELS]
+    ] + [root / "model" / n for n in model_names]
     missing = [str(path) for path in required if not path.is_file()]
     if missing: raise FileNotFoundError(f"Missing submission files: {missing}")
     metadata = json.loads((root / "model" / "metadata.json").read_text(encoding="utf-8"))

@@ -1,0 +1,20 @@
+{
+  "id": "exp014_weighted_catboost",
+  "version": "v14",
+  "status": "candidate",
+  "parent": "exp013_recent_residual_geometry",
+  "changes": [
+    "Add a CatBoost ensemble trained with a three-year sample-weight half-life",
+    "Refit segment blends and v13 residual tables against the augmented OOF matrix"
+  ],
+  "validation": {
+    "uniform_catboost_2024_bss": 845.7084,
+    "weighted_catboost_2024_bss": 858.0611,
+    "uniform_catboost_affine_upper": 891.6826,
+    "weighted_catboost_affine_upper": 899.7141,
+    "segment_five_block_base_bss": 899.3269,
+    "segment_five_block_weighted_bss": 904.8148,
+    "segment_five_block_delta": 5.4879
+  },
+  "public_score": null
+}

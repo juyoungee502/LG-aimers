@@ -227,6 +227,7 @@ def main():
         "lgb_a": lgb.Booster(model_str=lgb_0_text),
         "lgb_b": lgb.Booster(model_str=lgb_1_text),
         "catboost": [],
+        "weighted_catboost": [],
         "count_other": [],
         "count_two_strike": [],
         "categorical_catboost": [],
@@ -238,6 +239,12 @@ def main():
         model = CatBoostClassifier()
         model.load_model(os.path.join(model_dir, f"catboost_{index}.cbm"))
         models["catboost"].append(model)
+        if "weighted_catboost" in bundle.get("model_names", []):
+            weighted_model = CatBoostClassifier()
+            weighted_model.load_model(
+                os.path.join(model_dir, f"catboost_weighted_{index}.cbm")
+            )
+            models["weighted_catboost"].append(weighted_model)
         for label, key in (("other", "count_other"), ("two_strike", "count_two_strike")):
             expert = CatBoostClassifier()
             expert.load_model(os.path.join(model_dir, f"catboost_{label}_{index}.cbm"))
@@ -270,6 +277,13 @@ def main():
 
     cat_prediction = np.mean(
         [model.predict_proba(features)[:, 1] for model in models["catboost"]], axis=0
+    )
+    weighted_cat_prediction = (
+        np.mean([
+            model.predict_proba(features)[:, 1]
+            for model in models["weighted_catboost"]
+        ], axis=0)
+        if models["weighted_catboost"] else np.zeros(len(features), dtype=np.float64)
     )
     two_strike_gate = features["two_strike"].to_numpy().astype(bool)
     count_prediction = np.empty(len(features), dtype=np.float64)
@@ -313,6 +327,7 @@ def main():
             + segment_weights["categorical_count_expert"]
             * categorical_count_prediction[mask]
             + segment_weights["brier_regressor"] * brier_prediction[mask]
+            + segment_weights.get("weighted_catboost", 0.) * weighted_cat_prediction[mask]
         )
         prediction[mask] = params["intercept"] + params["slope"] * raw_prediction
     residual_adjustment, _ = apply_residual_effects(test, bundle["residual_effects"])
