@@ -11,7 +11,7 @@ from research_inferred_pitch_priors import bss, reconstruct_labels
 from research_trackman_failure_prior import TARGET, aligned_history, selection_delta
 
 
-def segment_gains(target, base, candidate, rows):
+def segment_curve(target, base, signal, rows):
     masks = {
         "all": np.ones(len(rows), dtype=bool),
         "first_half": np.arange(len(rows)) < len(rows) // 2,
@@ -20,10 +20,16 @@ def segment_gains(target, base, candidate, rows):
         "months_6_7": rows["game_month"].between(6, 7).to_numpy(),
         "months_8_11": rows["game_month"].between(8, 11).to_numpy(),
     }
-    return {
-        name: bss(target[mask], candidate[mask]) - bss(target[mask], base[mask])
-        for name, mask in masks.items() if mask.any()
-    }
+    curves = {}
+    residual = target - base
+    for name, mask in masks.items():
+        if not mask.any():
+            continue
+        reference = float(target[mask].mean() * (1.0 - target[mask].mean()))
+        linear = 200000.0 * float(np.mean(signal[mask] * residual[mask])) / reference
+        quadratic = 100000.0 * float(np.mean(signal[mask] ** 2)) / reference
+        curves[name] = (linear, quadratic)
+    return curves
 
 
 def main():
@@ -63,20 +69,25 @@ def main():
 
     reports = []
     for outcome_k, selection_k in configurations:
+        curves = {}
+        centers = {}
+        for year in (2023, 2024):
+            mask = oof["season"] == year
+            y = oof["target"][mask].astype(float)
+            base = oof["blended"][mask].astype(float)
+            rows = data.loc[data["season"].eq(year)].reset_index(drop=True)
+            signal, center = prepared[(year, outcome_k, selection_k)]
+            curves[str(year)] = segment_curve(y, base, signal, rows)
+            centers[str(year)] = center
         for weight in np.arange(-2.0, 2.001, .05):
             year_gains = {}
-            centers = {}
             all_segments = []
-            for year in (2023, 2024):
-                mask = oof["season"] == year
-                y = oof["target"][mask].astype(float)
-                base = oof["blended"][mask].astype(float)
-                rows = data.loc[data["season"].eq(year)].reset_index(drop=True)
-                signal, center = prepared[(year, outcome_k, selection_k)]
-                candidate = np.clip(base + weight * signal, .005, .995)
-                gains = segment_gains(y, base, candidate, rows)
-                year_gains[str(year)] = gains
-                centers[str(year)] = center
+            for year in ("2023", "2024"):
+                gains = {
+                    name: linear * weight - quadratic * weight**2
+                    for name, (linear, quadratic) in curves[year].items()
+                }
+                year_gains[year] = gains
                 all_segments.extend(gains.values())
             reports.append({
                 "outcome_k": outcome_k, "selection_k": selection_k,
