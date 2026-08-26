@@ -152,6 +152,27 @@ def build_features(df, bundle):
     return out.reindex(columns=expected)
 
 
+def history_expert(features, prior):
+    specs = [
+        ("asof_pitcher_prev1_game_success_rate", .12),
+        ("asof_pitcher_prev3_game_success_rate", .28),
+        ("asof_pitcher_prev5_game_success_rate", .20),
+        ("pitcher_season_success_s100", .22),
+        ("asof_pitcher_success_rate", .10),
+        ("asof_batter_success_rate", .08),
+    ]
+    total = np.zeros(len(features), np.float64)
+    weight = np.zeros(len(features), np.float64)
+    for col, component_weight in specs:
+        values = features[col].to_numpy(np.float64)
+        valid = np.isfinite(values)
+        total[valid] += component_weight * values[valid]
+        weight[valid] += component_weight
+    return np.divide(
+        total, weight, out=np.full(len(features), prior), where=weight > 0
+    )
+
+
 def main():
     started = time.time()
     # The evaluation runner may execute /app/script.py while its current working
@@ -169,13 +190,13 @@ def main():
         bundle["history"][name] = {
             int(key): value for key, value in bundle["history"][name].items()
         }
-    with open(os.path.join(model_dir, "lgb_full.txt"), "r", encoding="utf-8") as file:
-        lgb_full_text = file.read()
-    with open(os.path.join(model_dir, "lgb_recent.txt"), "r", encoding="utf-8") as file:
-        lgb_recent_text = file.read()
+    with open(os.path.join(model_dir, "lgb_0.txt"), "r", encoding="utf-8") as file:
+        lgb_0_text = file.read()
+    with open(os.path.join(model_dir, "lgb_1.txt"), "r", encoding="utf-8") as file:
+        lgb_1_text = file.read()
     models = {
-        "lgb_full": lgb.Booster(model_str=lgb_full_text),
-        "lgb_recent": lgb.Booster(model_str=lgb_recent_text),
+        "lgb_a": lgb.Booster(model_str=lgb_0_text),
+        "lgb_b": lgb.Booster(model_str=lgb_1_text),
         "catboost": CatBoostClassifier(),
     }
     models["catboost"].load_model(os.path.join(model_dir, "catboost.cbm"))
@@ -192,14 +213,15 @@ def main():
 
     weights = bundle["blend_weights"]
     prediction = (
-        weights["lgb_full"] * models["lgb_full"].predict(features)
-        + weights["lgb_recent"] * models["lgb_recent"].predict(features)
+        weights["lgb_a"] * models["lgb_a"].predict(features)
+        + weights["lgb_b"] * models["lgb_b"].predict(features)
         + weights["catboost"] * models["catboost"].predict_proba(features)[:, 1]
+        + weights["history_expert"] * history_expert(
+            features, bundle["history"]["global_prior"]
+        )
     )
-    prediction = (
-        bundle["calibration_intercept"]
-        + bundle["calibration_slope"] * prediction
-    )
+    calibration = bundle["calibration"]
+    prediction = calibration["intercept"] + calibration["slope"] * prediction
     prediction = np.clip(prediction, *bundle["clip"])
     if len(prediction) != len(test) or not np.isfinite(prediction).all():
         raise ValueError("Invalid prediction length or non-finite prediction")

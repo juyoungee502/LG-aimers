@@ -2,7 +2,7 @@
   "experiment_id": "exp001_junseo_temporal_catboost",
   "owner": "JunseoPark543",
   "branch": "experiment/junseo-catboost-gpu",
-  "status": "implemented_not_trained",
+  "status": "superseded_by_v3",
   "model": "CatBoost with temporal sample weights and conservative Platt calibration",
   "feature_version": "features.py:v1",
   "train_entrypoint": "train.py",

@@ -1,0 +1,17 @@
+{
+  "experiment_id": "exp003_rolling_bss_ensemble",
+  "owner": "JunseoPark543",
+  "branch": "experiment/junseo-catboost-gpu",
+  "status": "implemented_not_trained",
+  "model": "2x LightGBM + GPU CatBoost + as-of history expert",
+  "feature_version": "feature_engineering.py:v2",
+  "train_entrypoint": "train_bss_ensemble.py",
+  "inference_entrypoint": "submit/script.py",
+  "train_seasons": [2019, 2020, 2021, 2022, 2023, 2024],
+  "validation_seasons": [2023, 2024],
+  "seed": 20260826,
+  "metrics": {"bss_2023": null, "bss_2024": null, "public_score": null},
+  "artifacts": ["submit/model/metadata.json", "submit/model/lgb_0.txt", "submit/model/lgb_1.txt", "submit/model/catboost.cbm"],
+  "reproduce": "python train_bss_ensemble.py --preset full --task-type GPU --devices 0",
+  "notes": "Blend minimizes equal-weight mean normalized Brier across rolling years; calibration is conservatively shrunk."
+}
