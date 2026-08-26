@@ -21,6 +21,7 @@ from feature_engineering import (
 from residual_effects import apply_residual_effects
 from trackman_context import apply_frozen_context
 from failure_context import apply_frozen_context as apply_frozen_failure_context
+from residual_portfolio import apply_frozen_portfolio
 
 
 ID_COL = "row_id"
@@ -484,6 +485,8 @@ def main():
                 + weight_all * logit(p_all[regular])
                 + weight_middle * logit(p_middle[regular])
             )
+    if "residual_portfolio" in bundle:
+        prediction += apply_frozen_portfolio(test, bundle["residual_portfolio"])
     prediction = np.clip(prediction, *bundle["clip"])
     if len(prediction) != len(test) or not np.isfinite(prediction).all():
         raise ValueError("Invalid prediction length or non-finite prediction")
