@@ -12,7 +12,7 @@ from pathlib import Path
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
-from catboost import CatBoostClassifier
+from catboost import CatBoostClassifier, CatBoostRegressor
 from scipy.optimize import minimize
 
 from feature_engineering import (
@@ -26,9 +26,9 @@ CAT_COLUMNS = [
 ]
 MODEL_NAMES = [
     "lgb_a", "lgb_b", "catboost", "history_expert", "count_expert",
-    "categorical_catboost", "categorical_count_expert",
+    "categorical_catboost", "categorical_count_expert", "brier_regressor",
 ]
-SEGMENT_MODEL_INDICES = [2, 4, 5, 6]
+SEGMENT_MODEL_INDICES = [2, 4, 5, 6, 7]
 SEGMENT_MODEL_NAMES = [MODEL_NAMES[index] for index in SEGMENT_MODEL_INDICES]
 
 
@@ -145,6 +145,16 @@ def fit_categorical_cat(x_train, y_train, args, seed):
 def fit_categorical_count_expert(x_train, y_train, args, seed, two_strike):
     mask = x_train["two_strike"].to_numpy() == int(two_strike)
     return fit_categorical_cat(x_train.loc[mask], y_train[mask], args, seed)
+
+
+def fit_brier_regressor(x_train, y_train, args, seed):
+    """Optimize squared probability error directly instead of Logloss."""
+    rounds = 1200 if args.preset == "full" else 150
+    params = cat_params(args, rounds, seed)
+    params.update(loss_function="RMSE", eval_metric="RMSE")
+    model = CatBoostRegressor(**params)
+    model.fit(x_train, y_train)
+    return model
 
 
 def fit_count_expert(x_train, y_train, args, seed, two_strike):
@@ -289,6 +299,11 @@ def main() -> None:
                 predict_count_expert(other, two_strike, x.loc[va])
             )
         predictions.append(np.mean(categorical_expert_predictions, axis=0))
+        regressor_predictions = []
+        for seed in (82, 83, 84):
+            regressor = fit_brier_regressor(x.loc[tr], y[tr], args, seed)
+            regressor_predictions.append(regressor.predict(x.loc[va]))
+        predictions.append(np.mean(regressor_predictions, axis=0))
         matrix = np.column_stack(predictions)
         component_reports[str(valid_year)] = {
             name: {"brier": brier(y[va], matrix[:, i]), "bss": bss(y[va], matrix[:, i])}
@@ -302,7 +317,7 @@ def main() -> None:
     oof_year = np.concatenate(fold_years); oof_gate = np.concatenate(fold_gates)
     segment_parameters = optimize_segment_blends(oof_y, oof_year, oof, oof_gate)
     blended = apply_segment_blends(oof, oof_gate, segment_parameters)
-    weights = np.array([0., 0., 1., 0., 0., 0., 0.])
+    weights = np.array([0., 0., 1., 0., 0., 0., 0., 0.])
     intercept, slope = 0., 1.
     reports = {}
     for year in (2023, 2024):
@@ -313,7 +328,7 @@ def main() -> None:
     print("OOF:", reports)
     diagnostics = Path(args.diagnostic_dir); diagnostics.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
-        diagnostics / "v10_oof_predictions.npz", predictions=oof,
+        diagnostics / "v11_oof_predictions.npz", predictions=oof,
         target=oof_y, season=oof_year, model_names=np.asarray(MODEL_NAMES),
         two_strike=oof_gate, blended=blended,
     )
@@ -355,9 +370,16 @@ def main() -> None:
             categorical_expert.save_model(
                 str(out / f"catboost_categorical_{label}_{index}.cbm")
             )
+    for index, seed in enumerate((82, 83, 84)):
+        regressor = CatBoostRegressor(**{
+            **cat_params(args, cat_rounds, seed),
+            "loss_function": "RMSE", "eval_metric": "RMSE",
+        })
+        regressor.fit(x, y)
+        regressor.save_model(str(out / f"catboost_brier_{index}.cbm"))
 
     metadata = {
-        "version":"v10_categorical_specialists", "feature_columns":x.columns.tolist(),
+        "version":"v11_brier_regression", "feature_columns":x.columns.tolist(),
         "cat_features":[], "history":asdict(build_end_history(raw, y_series)),
         "model_names":MODEL_NAMES, "blend_weights":dict(zip(MODEL_NAMES, weights.tolist())),
         "calibration":{"intercept":intercept, "slope":slope}, "clip":[.005,.995],
@@ -371,6 +393,6 @@ def main() -> None:
                          "rolling_reports":reports, "elapsed_seconds":time.time()-started},
     }
     (out / "metadata.json").write_text(json.dumps(metadata, ensure_ascii=False), encoding="utf-8")
-    print(f"Saved v10 artifacts to {out}; diagnostics={diagnostics}; elapsed={time.time()-started:.1f}s")
+    print(f"Saved v11 artifacts to {out}; diagnostics={diagnostics}; elapsed={time.time()-started:.1f}s")
 
 if __name__ == "__main__": main()

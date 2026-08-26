@@ -23,25 +23,25 @@ python train.py --preset full --task-type GPU --devices 0
 For multiple GPUs, CatBoost accepts values such as `--devices 0:1` or
 `--devices 0-3`.
 
-## Recommended BSS ensemble (v10)
+## Recommended BSS ensemble (v11)
 
 The competition model is trained with rolling 2023/2024 validation and directly
 selects the blend by normalized Brier score:
 
 ```bash
-bash run_v10.sh 0
+bash run_v11.sh 0
 ```
 
-The one-command runner trains the model, builds `submission_v10.zip`, saves the
+The one-command runner trains the model, builds `submission_v11.zip`, saves the
 training log and OOF diagnostics, and bundles all three as
-`outputs/results_v10.zip`. The argument is the CatBoost GPU device specification;
-for example, use `bash run_v10.sh 0:1` for GPUs 0 and 1.
+`outputs/results_v11.zip`. The argument is the CatBoost GPU device specification;
+for example, use `bash run_v11.sh 0:1` for GPUs 0 and 1.
 
 The trainer writes native LightGBM/CatBoost models and JSON metadata under
-`submit/model/`. V10 extends the successful native-categorical CatBoost with
-separate three-seed specialists for two-strike and non-two-strike rows. Segment
-simplex selection can reject any weak candidate. Raw OOF predictions are saved
-to `outputs/v10_oof_predictions.npz` for the next analysis cycle.
+`submit/model/`. V11 adds a three-seed CatBoost regressor trained with RMSE,
+which directly optimizes squared probability error for the binary target. Segment
+simplex selection can reject this or any other weak candidate. Raw OOF predictions
+are saved to `outputs/v11_oof_predictions.npz` for the next analysis cycle.
 The builder checks the model version and expected file layout before producing
 the ZIP.
 

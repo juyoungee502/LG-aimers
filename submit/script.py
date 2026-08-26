@@ -13,7 +13,7 @@ import json
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
-from catboost import CatBoostClassifier
+from catboost import CatBoostClassifier, CatBoostRegressor
 from feature_engineering import (
     HistoryTables, add_inference_component_features, add_state_interactions,
     engineer_features, inference_history_arrays,
@@ -231,6 +231,7 @@ def main():
         "categorical_catboost": [],
         "categorical_count_other": [],
         "categorical_count_two_strike": [],
+        "brier_regressor": [],
     }
     for index in range(3):
         model = CatBoostClassifier()
@@ -252,6 +253,9 @@ def main():
                 os.path.join(model_dir, f"catboost_categorical_{label}_{index}.cbm")
             )
             models[key].append(categorical_expert)
+        regressor = CatBoostRegressor()
+        regressor.load_model(os.path.join(model_dir, f"catboost_brier_{index}.cbm"))
+        models["brier_regressor"].append(regressor)
     print("Model version:", bundle["version"])
     test = pd.read_csv(test_path, encoding="utf-8-sig")
     if ID_COL not in test.columns or test[ID_COL].duplicated().any():
@@ -293,6 +297,9 @@ def main():
                 model.predict_proba(features.loc[mask])[:, 1]
                 for model in models[key]
             ], axis=0)
+    brier_prediction = np.mean([
+        model.predict(features) for model in models["brier_regressor"]
+    ], axis=0)
     prediction = np.empty(len(features), dtype=np.float64)
     for label, gate_value in (("other", False), ("two_strike", True)):
         mask = two_strike_gate == gate_value
@@ -304,6 +311,7 @@ def main():
             + segment_weights["categorical_catboost"] * categorical_prediction[mask]
             + segment_weights["categorical_count_expert"]
             * categorical_count_prediction[mask]
+            + segment_weights["brier_regressor"] * brier_prediction[mask]
         )
         prediction[mask] = params["intercept"] + params["slope"] * raw_prediction
     prediction = np.clip(prediction, *bundle["clip"])
