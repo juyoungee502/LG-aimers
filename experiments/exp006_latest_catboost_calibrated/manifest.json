@@ -1,0 +1,17 @@
+{
+  "experiment_id": "exp006_latest_catboost_calibrated",
+  "owner": "JunseoPark543",
+  "branch": "experiment/junseo-catboost-gpu",
+  "status": "implemented_not_trained",
+  "model": "latest-fold selected 3-seed CatBoost with conservative affine calibration",
+  "feature_version": "feature_engineering.py:v4-state-batched",
+  "train_entrypoint": "train_bss_ensemble.py",
+  "inference_entrypoint": "submit/script.py",
+  "train_seasons": [2019, 2020, 2021, 2022, 2023, 2024],
+  "validation_seasons": [2023, 2024],
+  "seed": 20260826,
+  "metrics": {"estimated_bss_2024_from_v5_oof": 892.49, "public_score": null},
+  "artifacts": ["submit/model/metadata.json", "outputs/v6_oof_predictions.npz", "submission_v6.zip"],
+  "reproduce": "bash run_v6.sh 0",
+  "notes": "Removes blend weight regularization, excludes the weak history expert, and applies mildly regularized latest-fold affine calibration."
+}
