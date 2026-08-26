@@ -49,6 +49,9 @@ def model_parameters(seed, variant):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--valid-year", type=int, required=True, choices=(2023, 2024))
+    parser.add_argument(
+        "--encoding", choices=("numeric", "categorical"), default="numeric"
+    )
     args = parser.parse_args()
     root = Path(__file__).resolve().parent
     data = pd.read_csv(root / "data" / "train.csv", encoding="utf-8-sig", low_memory=False)
@@ -94,10 +97,10 @@ def main():
             eval_metric="Logloss", task_type="GPU", devices="0",
             random_seed=610 + offset, allow_writing_files=False, verbose=0,
         )
-        model.fit(
-            features.loc[train], target[train], sample_weight=sample_weight,
-            cat_features=CAT_COLUMNS,
-        )
+        fit_kwargs = {"sample_weight": sample_weight}
+        if args.encoding == "categorical":
+            fit_kwargs["cat_features"] = CAT_COLUMNS
+        model.fit(features.loc[train], target[train], **fit_kwargs)
         prediction = model.predict_proba(features.loc[valid])[:, 1]
         predictions[variant] = prediction.astype(np.float32)
         half = len(y) // 2
@@ -109,13 +112,16 @@ def main():
                 bss(y[half:], blended[half:]) - bss(y[half:], base[half:]),
             ]
             reports.append({
-                "valid_year": args.valid_year, "variant": variant,
+                "valid_year": args.valid_year, "encoding": args.encoding,
+                "variant": variant,
                 "weight": float(weight), "gain": values[0],
                 "gain_first_half": values[1], "gain_second_half": values[2],
                 "min_half": min(values[1:]), "standalone_bss": bss(y, prediction),
             })
     reports.sort(key=lambda row: (row["min_half"], row["gain"]), reverse=True)
-    output = root / "research" / f"trackman_context_{args.valid_year}.npz"
+    output = root / "research" / (
+        f"trackman_context_{args.valid_year}_{args.encoding}.npz"
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         output, target=y.astype(np.float32), base=base.astype(np.float32),
@@ -124,7 +130,7 @@ def main():
         reports_json=np.asarray(json.dumps(reports)),
     )
     print(json.dumps({
-        "mapped_pitchers": len(mapping),
+        "encoding": args.encoding, "mapped_pitchers": len(mapping),
         "mapped_confidence_min": float(mapping_report["confidence"].min()),
         "trackman_rows": len(trackman), "top": reports[:40],
     }, indent=2), flush=True)
