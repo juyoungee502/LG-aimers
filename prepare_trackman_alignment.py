@@ -7,7 +7,7 @@ only games with at least 90% sequence coverage are retained.
 from __future__ import annotations
 
 import json
-from collections import defaultdict
+from collections import Counter
 from difflib import SequenceMatcher
 from pathlib import Path
 
@@ -61,20 +61,93 @@ def trackman_games(frame):
     return frame, games.sort_values(["season", "date"])
 
 
-def infer_team_maps(train, trackman):
-    maps = {}
-    for season in sorted(train["season"].unique()):
-        main = train.loc[train["season"].eq(season)].groupby("pitcher_team_id").size()
-        history = trackman.loc[trackman["season"].eq(season)].groupby("pitcher_team").size()
-        main_rate = main.to_numpy(float) / main.sum()
-        history_rate = history.to_numpy(float) / history.sum()
-        rows, columns = linear_sum_assignment(
-            np.abs(main_rate[:, None] - history_rate[None, :])
-        )
-        maps[int(season)] = {
-            int(main.index[i]): str(history.index[j]) for i, j in zip(rows, columns)
+def edge_tensor(main, history, main_teams, history_teams):
+    """Schedule overlap for every anonymous-to-named directed team edge."""
+    size = len(main_teams)
+    tensor = np.zeros((size, size, size, size), dtype=np.float32)
+    main_edges, history_edges = {}, {}
+    for i, home in enumerate(main_teams):
+        for j, away in enumerate(main_teams):
+            if i != j:
+                rows = main.loc[main["home"].eq(home) & main["away"].eq(away)]
+                main_edges[i, j] = Counter(zip(rows["month"], rows["weekday"]))
+    for i, home in enumerate(history_teams):
+        for j, away in enumerate(history_teams):
+            if i != j:
+                rows = history.loc[
+                    history["home"].eq(home) & history["away"].eq(away)
+                ]
+                history_edges[i, j] = Counter(zip(rows["month"], rows["weekday"]))
+    for i in range(size):
+        for j in range(size):
+            if i == j:
+                continue
+            for u in range(size):
+                for v in range(size):
+                    if u != v:
+                        tensor[i, j, u, v] = sum(
+                            (main_edges[i, j] & history_edges[u, v]).values()
+                        )
+    return tensor
+
+
+def mapping_score(tensor, permutation):
+    return float(sum(
+        tensor[i, j, permutation[i], permutation[j]]
+        for i in range(len(permutation))
+        for j in range(len(permutation)) if i != j
+    ))
+
+
+def climb_mapping(tensor, start):
+    permutation = np.asarray(start, dtype=np.int16).copy()
+    best = mapping_score(tensor, permutation)
+    while True:
+        choice = None
+        for i in range(len(permutation)):
+            for j in range(i + 1, len(permutation)):
+                candidate = permutation.copy()
+                candidate[i], candidate[j] = candidate[j], candidate[i]
+                value = mapping_score(tensor, candidate)
+                if value > best + 1e-9:
+                    best, choice = value, candidate
+        if choice is None:
+            return best, permutation
+        permutation = choice
+
+
+def infer_team_maps(main_games, history_games, restarts=600):
+    """Resolve team IDs from the season schedule graph with random restarts."""
+    rng = np.random.default_rng(20260814)
+    maps, diagnostics = {}, []
+    for season in sorted(main_games["season"].unique()):
+        main = main_games.loc[main_games["season"].eq(season)]
+        history = history_games.loc[history_games["season"].eq(season)]
+        main_teams = sorted(set(main["home"]) | set(main["away"]))
+        history_teams = sorted(set(history["home"]) | set(history["away"]))
+        if len(main_teams) != 10 or len(history_teams) != 10:
+            raise ValueError((season, main_teams, history_teams))
+        tensor = edge_tensor(main, history, main_teams, history_teams)
+        starts = [np.arange(10, dtype=np.int16)]
+        starts.extend(rng.permutation(10) for _ in range(restarts))
+        solutions = {}
+        for start in starts:
+            score, permutation = climb_mapping(tensor, start)
+            solutions[tuple(map(int, permutation))] = score
+        ranked = sorted(solutions.items(), key=lambda item: item[1], reverse=True)
+        permutation, score = ranked[0]
+        mapping = {
+            int(main_teams[i]): str(history_teams[permutation[i]])
+            for i in range(10)
         }
-    return maps
+        maps[int(season)] = mapping
+        diagnostics.append({
+            "season": int(season), "score": score,
+            "second": ranked[1][1], "gap": score - ranked[1][1],
+            "mapping": mapping,
+        })
+        print(json.dumps(diagnostics[-1]), flush=True)
+    return maps, diagnostics
 
 
 def match_games(main_games, trackman_games_frame, team_maps):
@@ -149,7 +222,7 @@ def main():
     ].reset_index(drop=True)
     train, main_games = train_games(train)
     trackman, history_games = trackman_games(trackman)
-    team_maps = infer_team_maps(train, trackman)
+    team_maps, team_diagnostics = infer_team_maps(main_games, history_games)
     matches = match_games(main_games, history_games, team_maps)
     track_groups = {
         str(key): group.sort_values("pitch_no")
@@ -195,7 +268,8 @@ def main():
     detail = pd.DataFrame(details)
     detail.to_csv(root / "outputs" / "trackman_pitch_alignment_games.csv", index=False)
     report = {
-        "team_maps": team_maps, "matched_games": len(detail),
+        "team_maps": team_maps, "team_diagnostics": team_diagnostics,
+        "matched_games": len(detail),
         "accepted_games": int(detail["accepted"].sum()),
         "aligned_pitches": len(row_ids), "regular_rows": len(train),
         "row_coverage": float(len(row_ids) / len(train)),
