@@ -70,8 +70,9 @@ def bin_value(value, edges):
 
 def context_code(frame, context):
     count = frame["count_state"].to_numpy(np.int32)
-    phand = frame["pitcher_hand"].fillna("?").eq("L").to_numpy(np.int32)
-    bhand = frame["batter_hand"].fillna("?").eq("L").to_numpy(np.int32)
+    # Raw competition data encodes handedness as 1/2 (rather than L/R).
+    phand = pd.to_numeric(frame["pitcher_hand"], errors="coerce").eq(1).to_numpy(np.int32)
+    bhand = pd.to_numeric(frame["batter_hand"], errors="coerce").eq(1).to_numpy(np.int32)
     if context == "none":
         return np.zeros(len(frame), dtype=np.int32), 1
     if context == "count":
