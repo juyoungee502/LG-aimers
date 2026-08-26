@@ -105,7 +105,7 @@ def fit_lgb(x_train, y_train, x_valid, y_valid, weights, variant, args):
 def cat_params(args, iterations, seed):
     p = dict(
         iterations=iterations, learning_rate=.02, depth=6,
-        loss_function="Logloss", eval_metric="BrierScore", l2_leaf_reg=100.,
+        loss_function="Logloss", eval_metric="Logloss", l2_leaf_reg=100.,
         random_strength=1., random_seed=seed, border_count=32,
         allow_writing_files=False, verbose=100,
         task_type=args.task_type, thread_count=args.threads,
@@ -114,12 +114,15 @@ def cat_params(args, iterations, seed):
     return p
 
 
-def fit_cat(x_train, y_train, x_valid, y_valid, args, seed):
+def fit_cat(x_train, y_train, args, seed):
     rounds = 1200 if args.preset == "full" else 150
     model = CatBoostClassifier(**cat_params(args, rounds, seed))
     # IDs and categories intentionally remain numeric. On this task, official
     # as-of rates carry safer player history than target-derived CTR features.
-    model.fit(x_train, y_train, eval_set=(x_valid, y_valid), use_best_model=False)
+    # Iteration count is fixed from prior rolling experiments. Avoid passing an
+    # eval_set here: CatBoost's Brier metric is CPU-only on GPU training and the
+    # validation predictions are scored once with NumPy immediately afterwards.
+    model.fit(x_train, y_train)
     return model
 
 
@@ -176,7 +179,7 @@ def main() -> None:
             best_lgb[variant].append(model.best_iteration)
         cat_predictions = []
         for seed in (42, 43, 44):
-            cat = fit_cat(x.loc[tr], y[tr], x.loc[va], y[va], args, seed)
+            cat = fit_cat(x.loc[tr], y[tr], args, seed)
             cat_predictions.append(cat.predict_proba(x.loc[va])[:, 1])
         predictions.append(np.mean(cat_predictions, axis=0))
         predictions.append(history_expert(x.loc[va], float(y[tr].mean())))
