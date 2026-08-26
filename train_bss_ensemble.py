@@ -42,6 +42,14 @@ def arguments() -> argparse.Namespace:
     p.add_argument("--threads", type=int, default=-1)
     p.add_argument("--preset", choices=("fast", "full"), default="full")
     p.add_argument("--seed", type=int, default=20260826)
+    p.add_argument(
+        "--validation-years", default="2023,2024",
+        help="Comma-separated chronological OOF seasons (for example 2022,2023,2024).",
+    )
+    p.add_argument(
+        "--diagnostics-only", action="store_true",
+        help="Stop after writing rolling OOF predictions; do not replace submission models.",
+    )
     return p.parse_args()
 
 
@@ -249,6 +257,11 @@ def apply_segment_blends(matrix, two_strike_gate, parameters):
 def main() -> None:
     args = arguments(); started = time.time(); out = Path(args.output_dir)
     out.mkdir(parents=True, exist_ok=True)
+    validation_years = tuple(
+        sorted({int(value.strip()) for value in args.validation_years.split(",") if value.strip()})
+    )
+    if not validation_years:
+        raise ValueError("--validation-years must contain at least one season")
     train_path = Path(args.data_dir) / "train.csv"
     raw = pd.read_csv(train_path, encoding="utf-8-sig", low_memory=False)
     y_series = raw.pop(TARGET_COL).astype(np.float32); y = y_series.to_numpy()
@@ -263,7 +276,7 @@ def main() -> None:
     fold_predictions, fold_targets, fold_years, fold_gates = [], [], [], []
     component_reports = {}
     best_lgb = [[], []]
-    for valid_year in (2023, 2024):
+    for valid_year in validation_years:
         tr, va = years < valid_year, years == valid_year
         print(f"Rolling fold: train < {valid_year}, validate {valid_year}")
         predictions = []
@@ -320,7 +333,7 @@ def main() -> None:
     weights = np.array([0., 0., 1., 0., 0., 0., 0., 0.])
     intercept, slope = 0., 1.
     reports = {}
-    for year in (2023, 2024):
+    for year in validation_years:
         m = oof_year == year
         reports[str(year)] = {"brier": brier(oof_y[m], blended[m]), "bss": bss(oof_y[m], blended[m]),
                               "target_rate": float(oof_y[m].mean()), "prediction_mean": float(blended[m].mean())}
@@ -332,6 +345,13 @@ def main() -> None:
         target=oof_y, season=oof_year, model_names=np.asarray(MODEL_NAMES),
         two_strike=oof_gate, blended=blended,
     )
+
+    if args.diagnostics_only:
+        print(
+            f"Saved diagnostic-only OOF to {diagnostics}; "
+            f"validation_years={validation_years}; elapsed={time.time()-started:.1f}s"
+        )
+        return
 
     lgb_rounds = [max(50, int(round(np.median(v)*1.05))) for v in best_lgb]
     cat_rounds = 1320 if args.preset == "full" else 170
