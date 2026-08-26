@@ -25,6 +25,8 @@ def main():
         root / "data/train.csv", usecols=["season", "game_type"],
         encoding="utf-8-sig", low_memory=False,
     )
+    with np.load(root / "outputs/v17_oof_predictions.npz") as loaded:
+        v17 = {key: loaded[key] for key in loaded.files}
     cache = {}
     for feature_set in ("current", "prior_context"):
         suffix = "" if feature_set == "current" else "_prior_context"
@@ -32,8 +34,11 @@ def main():
             with np.load(root / f"research/failure_specialists_{year}{suffix}.npz") as loaded:
                 q = {key: loaded[key] for key in loaded.files}
             index = list(q["variants"].astype(str)).index("uniform_depth8")
+            base_mask = v17["season"] == year
+            if not np.allclose(q["target"], v17["target"][base_mask]):
+                raise ValueError(f"Failure specialist and v17 rows differ for {year}")
             cache[(feature_set, year)] = (
-                q["target"].astype(float), q["base"].astype(float),
+                q["target"].astype(float), v17["blended"][base_mask].astype(float),
                 q["predictions"][index, :, 3].astype(float),
                 q["predictions"][index, :, 4].astype(float),
                 data.loc[data["season"].eq(year), "game_type"].eq("R").to_numpy(),
@@ -78,7 +83,7 @@ def main():
         key=lambda row: (row["min_year"], row["min_half"], row["gain_2024"]),
         reverse=True,
     )
-    output = root / "research/failure_gating_report.json"
+    output = root / "research/failure_gating_v17_report.json"
     output.write_text(json.dumps(reports, indent=2), encoding="utf-8")
     print(json.dumps(reports[:80], indent=2), flush=True)
     print(f"Saved {output}")
