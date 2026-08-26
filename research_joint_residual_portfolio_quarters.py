@@ -130,7 +130,7 @@ def main():
              for label, (frame, _y, _base, _source) in blocks.items()}
     total_gains = {label: 0. for label in blocks}
     remaining, selected = set(candidates), []
-    for step in range(12):
+    for step in range(24):
         winner = None
         for name in remaining:
             for scale in (.25, .5, .75, 1., 1.25):
