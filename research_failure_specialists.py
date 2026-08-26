@@ -1,6 +1,7 @@
 """Screen decomposed failure classifiers as small logit blends over v16."""
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -46,6 +47,10 @@ def parameters(seed, variant):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--valid-year", type=int, default=2024, choices=(2023, 2024))
+    args = parser.parse_args()
+    valid_year = args.valid_year
     root = Path(__file__).resolve().parent
     raw = pd.read_csv(root / "data" / "train.csv", encoding="utf-8-sig", low_memory=False)
     target_series = raw.pop(TARGET_COL).astype(np.float32)
@@ -58,24 +63,24 @@ def main():
     for column in CAT_COLUMNS:
         features[column] = features[column].fillna(-1).astype(np.int32)
     seasons = raw["season"].to_numpy(np.int16)
-    train = seasons < 2024
-    valid = seasons == 2024
+    train = seasons < valid_year
+    valid = seasons == valid_year
     usable = labels[list(LABELS)].notna().all(axis=1).to_numpy() & train
 
     with np.load(root / "outputs" / "v16_oof_predictions.npz", allow_pickle=False) as loaded:
         oof = {key: loaded[key] for key in loaded.files}
-    latest = oof["season"] == 2024
+    latest = oof["season"] == valid_year
     y = oof["target"][latest].astype(float)
     base = oof["blended"][latest].astype(float)
     if not np.allclose(y, target[valid]):
-        raise ValueError("v16 OOF and train.csv do not align")
+        raise ValueError(f"v16 OOF and train.csv do not align for {valid_year}")
 
     variants, variant_predictions, reports = (
         ("weighted_depth6", "uniform_depth8"), {}, []
     )
     for variant in variants:
         predictions = {}
-        age = 2023 - seasons[usable].astype(float)
+        age = (valid_year - 1) - seasons[usable].astype(float)
         sample_weight = (
             np.exp(-np.log(2.) * age / 3.).astype(np.float32)
             if variant == "weighted_depth6" else None
@@ -118,10 +123,11 @@ def main():
                     "weight_middle": float(weight_middle), "gain_2024": gains[0],
                     "gain_first_half": gains[1], "gain_second_half": gains[2],
                     "min_half": min(gains[1:]),
-                    "p_all_bss": bss(y, p_all), "p_middle_bss": bss(y, p_middle),
+                    "valid_year": valid_year, "p_all_bss": bss(y, p_all),
+                    "p_middle_bss": bss(y, p_middle),
                 })
     reports.sort(key=lambda row: (row["min_half"], row["gain_2024"]), reverse=True)
-    output = root / "research" / "failure_specialists_2024.npz"
+    output = root / "research" / f"failure_specialists_{valid_year}.npz"
     output.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         output, variants=np.asarray(variants),
