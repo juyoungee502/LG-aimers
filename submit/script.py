@@ -22,6 +22,7 @@ from residual_effects import apply_residual_effects
 from trackman_context import apply_frozen_context
 from failure_context import apply_frozen_context as apply_frozen_failure_context
 from residual_portfolio import apply_frozen_portfolio
+from component_residual_portfolio import apply_component_portfolio, history_expert
 
 
 ID_COL = "row_id"
@@ -417,6 +418,7 @@ def main():
             * weighted_categorical_prediction[mask]
         )
         prediction[mask] = params["intercept"] + params["slope"] * raw_prediction
+    pre_specialist_prediction = prediction.copy()
     residual_adjustment, _ = apply_residual_effects(test, bundle["residual_effects"])
     prediction += residual_adjustment
     pitch_prior = bundle.get("pitch_failure_prior")
@@ -485,8 +487,23 @@ def main():
                 + weight_all * logit(p_all[regular])
                 + weight_middle * logit(p_middle[regular])
             )
+    pre_portfolio_prediction = prediction.copy()
     if "residual_portfolio" in bundle:
         prediction += apply_frozen_portfolio(test, bundle["residual_portfolio"])
+    if "component_residual_portfolio" in bundle:
+        component_predictions = {
+            "brier_regressor": brier_prediction,
+            "weighted_catboost": weighted_cat_prediction,
+            "categorical_count_expert": categorical_count_prediction,
+            "history_expert": history_expert(features, bundle["history"]["global_prior"]),
+            "pre_specialist_blend": pre_specialist_prediction,
+            "count_expert": count_prediction,
+            "categorical_catboost": categorical_prediction,
+        }
+        prediction += apply_component_portfolio(
+            test, component_predictions, pre_portfolio_prediction,
+            bundle["component_residual_portfolio"],
+        )
     prediction = np.clip(prediction, *bundle["clip"])
     if len(prediction) != len(test) or not np.isfinite(prediction).all():
         raise ValueError("Invalid prediction length or non-finite prediction")
