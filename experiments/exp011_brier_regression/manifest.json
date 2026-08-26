@@ -2,7 +2,7 @@
   "experiment_id": "exp011_brier_regression",
   "owner": "JunseoPark543",
   "branch": "experiment/junseo-catboost-gpu",
-  "status": "implemented_not_trained",
+  "status": "trained_current_best",
   "model": "v10 segment mixture plus 3-seed RMSE CatBoost regressor",
   "feature_version": "feature_engineering.py:v4-state-batched",
   "train_entrypoint": "train_bss_ensemble.py",
@@ -10,7 +10,7 @@
   "train_seasons": [2019, 2020, 2021, 2022, 2023, 2024],
   "validation_seasons": [2023, 2024],
   "seed": 20260826,
-  "metrics": {"bss_2023": null, "bss_2024": null, "public_score": null},
+  "metrics": {"bss_2023": 0.0, "raw_bss_2023": -482.45, "bss_2024": 913.04, "public_score": null},
   "artifacts": ["submit/model/metadata.json", "outputs/v11_oof_predictions.npz", "submission_v11.zip"],
   "reproduce": "bash run_v11.sh 0",
   "notes": "Tests direct squared-error optimization for probability prediction; five-candidate segment simplex optimization can assign the regressor zero weight."

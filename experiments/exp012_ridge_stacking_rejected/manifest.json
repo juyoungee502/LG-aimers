@@ -1,0 +1,12 @@
+{
+  "experiment_id": "exp012_ridge_stacking_rejected",
+  "owner": "JunseoPark543",
+  "branch": "experiment/junseo-catboost-gpu",
+  "status": "rejected_before_training",
+  "model": "segment-wise ridge stacking of v11 OOF candidates",
+  "validation_seasons": [2024],
+  "metrics": {"best_internal_5fold_bss_2024": 902.01, "v11_bss_2024": 913.04},
+  "artifacts": [],
+  "reproduce": "offline replay from results_v11.zip",
+  "notes": "Rejected because contiguous five-fold stacking validation underperformed v11 by about 11.03 BSS despite allowing signed linear combinations."
+}
