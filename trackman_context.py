@@ -126,3 +126,73 @@ def attach_context(rows: pd.DataFrame, trackman: pd.DataFrame):
         output[hand_columns] = got_hand[hand_columns].to_numpy(np.float32)
         blocks.append(output)
     return pd.concat(blocks).sort_index().reindex(columns=FEATURE_COLUMNS)
+
+
+def freeze_context(trackman: pd.DataFrame, target_season: int):
+    """Serialize final lookup tables so inference needs no Trackman file."""
+    count, hand = context_tables(trackman, target_season)
+    if count is None:
+        raise ValueError(f"No Trackman history before {target_season}")
+    count_frame = count.reset_index()
+    hand_frame = hand.reset_index()
+    count_columns = list(count.columns)
+    hand_columns = list(hand.columns)
+    return {
+        "target_season": int(target_season),
+        "feature_columns": list(FEATURE_COLUMNS),
+        "count_columns": count_columns,
+        "count_keys": [
+            f"{int(pitcher)}:{int(balls)}:{int(strikes)}"
+            for pitcher, balls, strikes in count_frame[
+                ["pitcher_id", "balls_before", "strikes_before"]
+            ].itertuples(index=False, name=None)
+        ],
+        "count_values": count_frame[count_columns].astype(np.float32).values.tolist(),
+        "hand_columns": hand_columns,
+        "hand_keys": [
+            f"{int(pitcher)}:{handedness}"
+            for pitcher, handedness in hand_frame[
+                ["pitcher_id", "batter_hand"]
+            ].itertuples(index=False, name=None)
+        ],
+        "hand_values": hand_frame[hand_columns].astype(np.float32).values.tolist(),
+    }
+
+
+def apply_frozen_context(rows: pd.DataFrame, configuration: dict):
+    """Apply frozen row-local Trackman context lookups."""
+    output = pd.DataFrame(
+        np.nan, index=rows.index, columns=configuration["feature_columns"],
+        dtype=np.float32,
+    )
+    count_lookup = dict(zip(
+        configuration["count_keys"], configuration["count_values"]
+    ))
+    count_keys = (
+        rows["pitcher_id"].astype(str) + ":"
+        + rows["balls_before"].astype(str) + ":"
+        + rows["strikes_before"].astype(str)
+    )
+    count_values = count_keys.map(count_lookup)
+    count_matrix = np.full(
+        (len(rows), len(configuration["count_columns"])), np.nan, np.float32,
+    )
+    for index, value in enumerate(count_values):
+        if isinstance(value, list):
+            count_matrix[index] = value
+    output[configuration["count_columns"]] = count_matrix
+
+    hand_lookup = dict(zip(
+        configuration["hand_keys"], configuration["hand_values"]
+    ))
+    handedness = rows["batter_hand"].map({1: "Left", 2: "Right"})
+    hand_keys = rows["pitcher_id"].astype(str) + ":" + handedness.astype(str)
+    hand_values = hand_keys.map(hand_lookup)
+    hand_matrix = np.full(
+        (len(rows), len(configuration["hand_columns"])), np.nan, np.float32,
+    )
+    for index, value in enumerate(hand_values):
+        if isinstance(value, list):
+            hand_matrix[index] = value
+    output[configuration["hand_columns"]] = hand_matrix
+    return output.reindex(columns=configuration["feature_columns"])

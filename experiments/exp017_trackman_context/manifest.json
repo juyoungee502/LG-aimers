@@ -1,0 +1,19 @@
+{
+  "id": "exp017_trackman_context",
+  "version": "v17",
+  "status": "candidate",
+  "parent": "exp016_pitch_failure_prior",
+  "changes": [
+    "Align official Trackman history to 88.30% of regular-season training pitches",
+    "Add prior-season pitcher-by-count and pitcher-by-batter-hand repertoire deviations",
+    "Blend a three-seed numeric CatBoost specialist only for regular-season rows"
+  ],
+  "validation": {
+    "single_seed_gain_2023": 75.8460,
+    "single_seed_gain_2024": 18.4328,
+    "minimum_half_season_gain": 11.9259,
+    "blend_weight": 0.35,
+    "inference_rule": "frozen 2019-2024 Trackman lookup; no evaluation aggregation"
+  },
+  "public_score": null
+}

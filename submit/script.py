@@ -19,11 +19,21 @@ from feature_engineering import (
     engineer_features, inference_history_arrays,
 )
 from residual_effects import apply_residual_effects
+from trackman_context import apply_frozen_context
 
 
 ID_COL = "row_id"
 TARGET_COL = "control_success"
 RATE_EPS = 1e-6
+
+
+def logit(probability):
+    probability = np.clip(probability, 1e-5, 1.0 - 1e-5)
+    return np.log(probability / (1.0 - probability))
+
+
+def sigmoid(value):
+    return 1.0 / (1.0 + np.exp(-np.clip(value, -30.0, 30.0)))
 
 
 def add_season_features(
@@ -236,6 +246,7 @@ def main():
         "categorical_count_other": [],
         "categorical_count_two_strike": [],
         "brier_regressor": [],
+        "trackman_context": [],
     }
     for index in range(3):
         model = CatBoostClassifier()
@@ -277,6 +288,12 @@ def main():
         regressor = CatBoostRegressor()
         regressor.load_model(os.path.join(model_dir, f"catboost_brier_{index}.cbm"))
         models["brier_regressor"].append(regressor)
+        if "trackman_context_specialist" in bundle.get("model_names", []):
+            trackman_model = CatBoostClassifier()
+            trackman_model.load_model(os.path.join(
+                model_dir, f"catboost_trackman_context_{index}.cbm"
+            ))
+            models["trackman_context"].append(trackman_model)
     print("Model version:", bundle["version"])
     test = pd.read_csv(test_path, encoding="utf-8-sig")
     if ID_COL not in test.columns or test[ID_COL].duplicated().any():
@@ -287,6 +304,20 @@ def main():
         features[col] = features[col].fillna(-1).astype(np.int32)
     if list(features.columns) != bundle["feature_columns"]:
         raise ValueError("Final feature order differs from training")
+
+    trackman_prediction = None
+    if models["trackman_context"]:
+        context = apply_frozen_context(test, bundle["trackman_context"])
+        trackman_features = pd.concat(
+            [features.reset_index(drop=True), context.reset_index(drop=True)], axis=1,
+        )
+        expected_trackman = bundle["trackman_context"]["model_feature_columns"]
+        if list(trackman_features.columns) != expected_trackman:
+            raise ValueError("Trackman specialist feature order differs from training")
+        trackman_prediction = np.mean([
+            model.predict_proba(trackman_features)[:, 1]
+            for model in models["trackman_context"]
+        ], axis=0)
 
     cat_prediction = np.mean(
         [model.predict_proba(features)[:, 1] for model in models["catboost"]], axis=0
@@ -372,6 +403,18 @@ def main():
             pitch_prior.get("game_type", "R")
         ).to_numpy()] = 0.
         prediction += correction
+    if trackman_prediction is not None:
+        configuration = bundle["trackman_context"]
+        regular = test["game_type"].astype(str).eq(
+            configuration.get("game_type", "R")
+        ).to_numpy()
+        weight = float(configuration["blend_weight"])
+        combined_logit = logit(prediction)
+        combined_logit[regular] = (
+            (1.0 - weight) * combined_logit[regular]
+            + weight * logit(trackman_prediction[regular])
+        )
+        prediction = sigmoid(combined_logit)
     prediction = np.clip(prediction, *bundle["clip"])
     if len(prediction) != len(test) or not np.isfinite(prediction).all():
         raise ValueError("Invalid prediction length or non-finite prediction")
