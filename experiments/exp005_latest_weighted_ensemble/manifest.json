@@ -1,0 +1,17 @@
+{
+  "experiment_id": "exp005_latest_weighted_ensemble",
+  "owner": "JunseoPark543",
+  "branch": "experiment/junseo-catboost-gpu",
+  "status": "implemented_not_trained",
+  "model": "2024-weighted constrained blend of 2x LightGBM, 3-seed CatBoost, history expert",
+  "feature_version": "feature_engineering.py:v4-state",
+  "train_entrypoint": "train_bss_ensemble.py",
+  "inference_entrypoint": "submit/script.py",
+  "train_seasons": [2019, 2020, 2021, 2022, 2023, 2024],
+  "validation_seasons": [2023, 2024],
+  "seed": 20260826,
+  "metrics": {"bss_2023": null, "bss_2024": null, "public_score": null},
+  "artifacts": ["submit/model/metadata.json", "outputs/v5_oof_predictions.npz", "submission_v5.zip"],
+  "reproduce": "python train_bss_ensemble.py --preset full --task-type GPU --devices 0",
+  "notes": "2024 gets 85% blend objective weight; 2023 is a 15% stability guard; history expert is capped at 5%."
+}

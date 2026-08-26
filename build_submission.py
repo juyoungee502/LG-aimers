@@ -19,7 +19,7 @@ def main():
     missing = [str(path) for path in required if not path.is_file()]
     if missing: raise FileNotFoundError(f"Missing submission files: {missing}")
     metadata = json.loads((root / "model" / "metadata.json").read_text(encoding="utf-8"))
-    if metadata.get("version") != "v4_state_seed_ensemble":
+    if metadata.get("version") != "v5_latest_weighted_ensemble":
         raise ValueError(f"Unexpected model version: {metadata.get('version')}")
     output = Path(args.output)
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:

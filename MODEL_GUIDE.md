@@ -23,19 +23,22 @@ python train.py --preset full --task-type GPU --devices 0
 For multiple GPUs, CatBoost accepts values such as `--devices 0:1` or
 `--devices 0-3`.
 
-## Recommended BSS ensemble (v4)
+## Recommended BSS ensemble (v5)
 
 The competition model is trained with rolling 2023/2024 validation and directly
 selects the blend by normalized Brier score:
 
 ```bash
 python train_bss_ensemble.py --preset full --task-type GPU --devices 0
-python build_submission.py --output submission_v4.zip
+python build_submission.py --output submission_v5.zip
 ```
 
 The trainer writes native LightGBM/CatBoost models and JSON metadata under
-`submit/model/`. V4 adds season-reconstructed ball/reverse/middle/strike states,
+`submit/model/`. V5 adds season-reconstructed ball/reverse/middle/strike states,
 two-strike intent proxies, and a three-seed strongly regularized CatBoost average.
+Blend selection weights the latest 2024 holdout at 85%, keeps a 15% stability
+guard from 2023, and caps the weak history expert at 5%. Raw OOF predictions are
+saved to `outputs/v5_oof_predictions.npz` for the next analysis cycle.
 The builder checks the model version and expected file layout before producing
 the ZIP.
 

@@ -31,6 +31,7 @@ def arguments() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--data-dir", default="data")
     p.add_argument("--output-dir", default="submit/model")
+    p.add_argument("--diagnostic-dir", default="outputs")
     p.add_argument("--task-type", choices=("CPU", "GPU"), default="GPU")
     p.add_argument("--devices", default="0")
     p.add_argument("--threads", type=int, default=-1)
@@ -127,20 +128,22 @@ def fit_cat(x_train, y_train, args, seed):
 
 
 def optimize_blend(y, years, matrix):
-    """Minimize mean yearly normalized Brier, not pooled row-count-weighted loss."""
+    """Optimize primarily for the latest holdout while retaining a stability guard."""
     unique_years = np.unique(years)
     def objective(z):
         w, intercept, slope = z[:4], z[4], z[5]
         pred = np.clip(intercept + slope * (matrix @ w), .005, .995)
         losses = []
+        fold_weights = []
         for year in unique_years:
             m = years == year; r = float(y[m].mean())
             losses.append(brier(y[m], pred[m]) / (r * (1-r)))
+            fold_weights.append(.85 if year == unique_years.max() else .15)
         penalty = .002 * np.sum((w - .25) ** 2) + .02 * intercept**2 + .01 * (slope-1)**2
-        return float(np.mean(losses) + penalty)
-    start = np.array([.30, .25, .25, .20, 0., 1.])
+        return float(np.average(losses, weights=fold_weights) + penalty)
+    start = np.array([.15, .15, .65, .05, 0., 1.])
     result = minimize(objective, start, method="SLSQP",
-                      bounds=[(0,1)]*4 + [(-.08,.08),(.75,1.25)],
+                      bounds=[(0,1),(0,1),(0,1),(0,.05)] + [(-.08,.08),(.75,1.25)],
                       constraints={"type":"eq", "fun":lambda z: z[:4].sum()-1},
                       options={"maxiter":500, "ftol":1e-12})
     if not result.success: raise RuntimeError(f"Blend optimization failed: {result.message}")
@@ -201,6 +204,12 @@ def main() -> None:
         reports[str(year)] = {"brier": brier(oof_y[m], blended[m]), "bss": bss(oof_y[m], blended[m]),
                               "target_rate": float(oof_y[m].mean()), "prediction_mean": float(blended[m].mean())}
     print("Blend weights:", dict(zip(MODEL_NAMES, weights))); print("OOF:", reports)
+    diagnostics = Path(args.diagnostic_dir); diagnostics.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(
+        diagnostics / "v5_oof_predictions.npz", predictions=oof,
+        target=oof_y, season=oof_year, model_names=np.asarray(MODEL_NAMES),
+        blended=blended,
+    )
 
     lgb_rounds = [max(50, int(round(np.median(v)*1.05))) for v in best_lgb]
     cat_rounds = 1320 if args.preset == "full" else 170
@@ -217,7 +226,7 @@ def main() -> None:
         final_cat.save_model(str(out / f"catboost_{index}.cbm"))
 
     metadata = {
-        "version":"v4_state_seed_ensemble", "feature_columns":x.columns.tolist(),
+        "version":"v5_latest_weighted_ensemble", "feature_columns":x.columns.tolist(),
         "cat_features":[], "history":asdict(build_end_history(raw, y_series)),
         "model_names":MODEL_NAMES, "blend_weights":dict(zip(MODEL_NAMES, weights.tolist())),
         "calibration":{"intercept":intercept, "slope":slope}, "clip":[.005,.995],
@@ -226,6 +235,6 @@ def main() -> None:
                          "rolling_reports":reports, "elapsed_seconds":time.time()-started},
     }
     (out / "metadata.json").write_text(json.dumps(metadata, ensure_ascii=False), encoding="utf-8")
-    print(f"Saved v3 artifacts to {out}; elapsed={time.time()-started:.1f}s")
+    print(f"Saved v5 artifacts to {out}; diagnostics={diagnostics}; elapsed={time.time()-started:.1f}s")
 
 if __name__ == "__main__": main()
