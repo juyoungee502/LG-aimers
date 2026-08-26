@@ -2,7 +2,7 @@
   "experiment_id": "exp006_latest_catboost_calibrated",
   "owner": "JunseoPark543",
   "branch": "experiment/junseo-catboost-gpu",
-  "status": "trained_pending_submission",
+  "status": "trained_baseline_for_v7",
   "model": "latest-fold selected 3-seed CatBoost with conservative affine calibration",
   "feature_version": "feature_engineering.py:v4-state-batched",
   "train_entrypoint": "train_bss_ensemble.py",

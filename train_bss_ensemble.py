@@ -24,7 +24,7 @@ CAT_COLUMNS = [
     "pitcher_id", "batter_id", "pitcher_team_id", "batter_team_id",
     "pitcher_hand", "batter_hand", "count_state", "hand_matchup", "team_matchup",
 ]
-MODEL_NAMES = ["lgb_a", "lgb_b", "catboost", "history_expert"]
+MODEL_NAMES = ["lgb_a", "lgb_b", "catboost", "history_expert", "count_expert"]
 
 
 def arguments() -> argparse.Namespace:
@@ -127,23 +127,41 @@ def fit_cat(x_train, y_train, args, seed):
     return model
 
 
+def fit_count_expert(x_train, y_train, args, seed, two_strike):
+    """Fit a CatBoost specialist for one side of the two-strike gate."""
+    mask = x_train["two_strike"].to_numpy() == int(two_strike)
+    return fit_cat(x_train.loc[mask], y_train[mask], args, seed)
+
+
+def predict_count_expert(other_model, two_strike_model, x_valid):
+    """Route each row to the specialist matching its pre-pitch count."""
+    gate = x_valid["two_strike"].to_numpy().astype(bool)
+    prediction = np.empty(len(x_valid), dtype=np.float64)
+    if (~gate).any():
+        prediction[~gate] = other_model.predict_proba(x_valid.loc[~gate])[:, 1]
+    if gate.any():
+        prediction[gate] = two_strike_model.predict_proba(x_valid.loc[gate])[:, 1]
+    return prediction
+
+
 def optimize_blend(y, years, matrix):
     """Select the latest-fold ensemble without forcing weak models into it."""
     latest = years == np.max(years)
     latest_y = y[latest]
     latest_matrix = matrix[latest]
     reference = float(latest_y.mean() * (1.0 - latest_y.mean()))
+    model_count = matrix.shape[1]
 
     def objective(z):
-        w, intercept, slope = z[:4], z[4], z[5]
+        w, intercept, slope = z[:model_count], z[model_count], z[model_count + 1]
         pred = np.clip(intercept + slope * (latest_matrix @ w), .005, .995)
         calibration_penalty = .005 * intercept**2 + .002 * (slope - 1.0)**2
         return float(brier(latest_y, pred) / reference + calibration_penalty)
 
-    start = np.array([0., 0., 1., 0., 0., 1.])
+    start = np.array([0., 0., .5, 0., .5, 0., 1.])
     result = minimize(objective, start, method="SLSQP",
-                      bounds=[(0,1),(0,1),(0,1),(0,0)] + [(-.08,.08),(.75,1.25)],
-                      constraints={"type":"eq", "fun":lambda z: z[:4].sum()-1},
+                      bounds=[(0,0),(0,0),(0,1),(0,0),(0,1)] + [(-.08,.08),(.75,1.25)],
+                      constraints={"type":"eq", "fun":lambda z: z[:model_count].sum()-1},
                       options={"maxiter":500, "ftol":1e-12})
     if not result.success: raise RuntimeError(f"Blend optimization failed: {result.message}")
     return result.x
@@ -181,6 +199,14 @@ def main() -> None:
             cat_predictions.append(cat.predict_proba(x.loc[va])[:, 1])
         predictions.append(np.mean(cat_predictions, axis=0))
         predictions.append(history_expert(x.loc[va], float(y[tr].mean())))
+        expert_predictions = []
+        for seed in (52, 53, 54):
+            other = fit_count_expert(x.loc[tr], y[tr], args, seed, False)
+            two_strike = fit_count_expert(x.loc[tr], y[tr], args, seed, True)
+            expert_predictions.append(
+                predict_count_expert(other, two_strike, x.loc[va])
+            )
+        predictions.append(np.mean(expert_predictions, axis=0))
         matrix = np.column_stack(predictions)
         component_reports[str(valid_year)] = {
             name: {"brier": brier(y[va], matrix[:, i]), "bss": bss(y[va], matrix[:, i])}
@@ -191,7 +217,8 @@ def main() -> None:
 
     oof = np.vstack(fold_predictions); oof_y = np.concatenate(fold_targets)
     oof_year = np.concatenate(fold_years); z = optimize_blend(oof_y, oof_year, oof)
-    weights, intercept, slope = z[:4], float(z[4]), float(z[5])
+    weights = z[:len(MODEL_NAMES)]
+    intercept, slope = float(z[len(MODEL_NAMES)]), float(z[len(MODEL_NAMES) + 1])
     blended = np.clip(intercept + slope * (oof @ weights), .005, .995)
     reports = {}
     for year in (2023, 2024):
@@ -201,7 +228,7 @@ def main() -> None:
     print("Blend weights:", dict(zip(MODEL_NAMES, weights))); print("OOF:", reports)
     diagnostics = Path(args.diagnostic_dir); diagnostics.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
-        diagnostics / "v6_oof_predictions.npz", predictions=oof,
+        diagnostics / "v7_oof_predictions.npz", predictions=oof,
         target=oof_y, season=oof_year, model_names=np.asarray(MODEL_NAMES),
         blended=blended,
     )
@@ -219,9 +246,15 @@ def main() -> None:
         final_cat = CatBoostClassifier(**cat_params(args, cat_rounds, seed))
         final_cat.fit(x, y)
         final_cat.save_model(str(out / f"catboost_{index}.cbm"))
+    for index, seed in enumerate((52, 53, 54)):
+        for label, two_strike in (("other", False), ("two_strike", True)):
+            mask = x["two_strike"].to_numpy() == int(two_strike)
+            expert = CatBoostClassifier(**cat_params(args, cat_rounds, seed))
+            expert.fit(x.loc[mask], y[mask])
+            expert.save_model(str(out / f"catboost_{label}_{index}.cbm"))
 
     metadata = {
-        "version":"v6_latest_catboost_calibrated", "feature_columns":x.columns.tolist(),
+        "version":"v7_count_mixture", "feature_columns":x.columns.tolist(),
         "cat_features":[], "history":asdict(build_end_history(raw, y_series)),
         "model_names":MODEL_NAMES, "blend_weights":dict(zip(MODEL_NAMES, weights.tolist())),
         "calibration":{"intercept":intercept, "slope":slope}, "clip":[.005,.995],
@@ -230,6 +263,6 @@ def main() -> None:
                          "rolling_reports":reports, "elapsed_seconds":time.time()-started},
     }
     (out / "metadata.json").write_text(json.dumps(metadata, ensure_ascii=False), encoding="utf-8")
-    print(f"Saved v6 artifacts to {out}; diagnostics={diagnostics}; elapsed={time.time()-started:.1f}s")
+    print(f"Saved v7 artifacts to {out}; diagnostics={diagnostics}; elapsed={time.time()-started:.1f}s")
 
 if __name__ == "__main__": main()

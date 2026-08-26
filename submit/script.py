@@ -226,11 +226,17 @@ def main():
         "lgb_a": lgb.Booster(model_str=lgb_0_text),
         "lgb_b": lgb.Booster(model_str=lgb_1_text),
         "catboost": [],
+        "count_other": [],
+        "count_two_strike": [],
     }
     for index in range(3):
         model = CatBoostClassifier()
         model.load_model(os.path.join(model_dir, f"catboost_{index}.cbm"))
         models["catboost"].append(model)
+        for label, key in (("other", "count_other"), ("two_strike", "count_two_strike")):
+            expert = CatBoostClassifier()
+            expert.load_model(os.path.join(model_dir, f"catboost_{label}_{index}.cbm"))
+            models[key].append(expert)
     print("Model version:", bundle["version"])
     test = pd.read_csv(test_path, encoding="utf-8-sig")
     if ID_COL not in test.columns or test[ID_COL].duplicated().any():
@@ -246,6 +252,18 @@ def main():
     cat_prediction = np.mean(
         [model.predict_proba(features)[:, 1] for model in models["catboost"]], axis=0
     )
+    two_strike_gate = features["two_strike"].to_numpy().astype(bool)
+    count_prediction = np.empty(len(features), dtype=np.float64)
+    if (~two_strike_gate).any():
+        count_prediction[~two_strike_gate] = np.mean([
+            model.predict_proba(features.loc[~two_strike_gate])[:, 1]
+            for model in models["count_other"]
+        ], axis=0)
+    if two_strike_gate.any():
+        count_prediction[two_strike_gate] = np.mean([
+            model.predict_proba(features.loc[two_strike_gate])[:, 1]
+            for model in models["count_two_strike"]
+        ], axis=0)
     prediction = (
         weights["lgb_a"] * models["lgb_a"].predict(features)
         + weights["lgb_b"] * models["lgb_b"].predict(features)
@@ -253,6 +271,7 @@ def main():
         + weights["history_expert"] * history_expert(
             features, bundle["history"]["global_prior"]
         )
+        + weights["count_expert"] * count_prediction
     )
     calibration = bundle["calibration"]
     prediction = calibration["intercept"] + calibration["slope"] * prediction
