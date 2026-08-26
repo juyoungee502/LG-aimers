@@ -10,7 +10,7 @@
   "train_seasons": [2019, 2020, 2021, 2022, 2023, 2024],
   "validation_seasons": [2023, 2024],
   "seed": 20260826,
-  "metrics": {"bss_2023": 61.40, "bss_2024": 865.00, "public_score": null},
+  "metrics": {"bss_2023": 61.40, "bss_2024": 865.00, "public_score": 968.0},
   "artifacts": ["submit/model/metadata.json", "outputs/v5_oof_predictions.npz", "submission_v5.zip"],
   "reproduce": "python train_bss_ensemble.py --preset full --task-type GPU --devices 0",
   "notes": "Superseded because blend regularization forced weak LightGBM/history components into the ensemble; v6 permits zero weights and uses latest-fold calibration."
