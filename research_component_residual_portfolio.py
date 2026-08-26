@@ -38,6 +38,20 @@ def gates(frame):
         result[f"regular_count_{value}"] = regular & (count == value)
     for value in range(4):
         result[f"regular_runners_{value}"] = regular & (runners == value)
+    baseout = frame["base_out_state"].to_numpy()
+    hands = frame["hand_matchup_code"].to_numpy()
+    outs = pd.to_numeric(frame["outs_before"], errors="coerce").fillna(0).to_numpy()
+    inning = frame["inning_bucket"].to_numpy()
+    score = frame["score_bucket"].to_numpy()
+    for value in range(24):
+        result[f"regular_baseout_{value}"] = regular & (baseout == value)
+    for value in range(9):
+        result[f"regular_hands_{value}"] = regular & (hands == value)
+    for value in range(3):
+        result[f"regular_outs_{value}"] = regular & (outs == value)
+        result[f"regular_inning_{value}"] = regular & (inning == value)
+    for value in range(-3, 4):
+        result[f"regular_score_{value + 3}"] = regular & (score == value)
     return result
 
 
