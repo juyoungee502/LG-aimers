@@ -29,9 +29,13 @@ The competition model is trained with rolling 2023/2024 validation and directly
 selects the blend by normalized Brier score:
 
 ```bash
-python train_bss_ensemble.py --preset full --task-type GPU --devices 0
-python build_submission.py --output submission_v5.zip
+bash run_v5.sh 0
 ```
+
+The one-command runner trains the model, builds `submission_v5.zip`, saves the
+training log and OOF diagnostics, and bundles all three as
+`outputs/results_v5.zip`. The argument is the CatBoost GPU device specification;
+for example, use `bash run_v5.sh 0:1` for GPUs 0 and 1.
 
 The trainer writes native LightGBM/CatBoost models and JSON metadata under
 `submit/model/`. V5 adds season-reconstructed ball/reverse/middle/strike states,
