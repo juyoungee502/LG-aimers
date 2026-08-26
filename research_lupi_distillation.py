@@ -207,10 +207,10 @@ def main():
         "year": args.valid_year, "teacher_weight": args.teacher_weight,
         "aligned_train_rows": int((train & aligned).sum()),
         "aligned_valid_rows": int(teacher_valid_mask.sum()),
-        "teacher_oof_train_bss": bss(
+        "teacher_oof_train_bss": float(bss(
             target[train & aligned], teacher_oof[train & aligned],
-        ),
-        "privileged_teacher_valid_bss": bss(teacher_y, teacher_valid),
+        )),
+        "privileged_teacher_valid_bss": float(bss(teacher_y, teacher_valid)),
         "top": reports[:30],
     }, indent=2), flush=True)
     print(f"Saved {output}", flush=True)
