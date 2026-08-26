@@ -34,6 +34,26 @@ RAW_FEATURES = [
     "li",
     "score_diff_pitcher_team",
     "run_total_before",
+    "derived_recent_success_mean",
+    "derived_recent_success_short",
+    "derived_success_trend_1_3",
+    "derived_success_trend_3_5",
+    "derived_success_trend_1_5",
+    "derived_success_range",
+    "derived_recent_middle_mean",
+    "derived_middle_trend_1_3",
+    "derived_middle_trend_3_5",
+    "derived_middle_trend_1_5",
+    "derived_middle_range",
+    "derived_recent_success_minus_career",
+    "derived_recent_middle_minus_career",
+    "derived_recent_success_minus_batter",
+    "derived_pitcher_batter_success_diff",
+    "derived_reverse_middle_sum",
+    "derived_failure_proxy",
+    "derived_ball_strike_diff",
+    "derived_pitchmix_entropy",
+    "derived_pitchmix_max",
 ]
 LOG_FEATURES = {
     "asof_pitcher_n", "asof_batter_n", "asof_pitcher_pitchmix_n", "li",
@@ -47,6 +67,59 @@ WEIGHTS = np.arange(-.5, .801, .025)
 def numeric(frame, name, base=None):
     if name == "base_prediction":
         return np.asarray(base, dtype=np.float64)
+    if name.startswith("derived_"):
+        def col(column):
+            return pd.to_numeric(frame[column], errors="coerce").to_numpy(np.float64)
+
+        p1 = col("asof_pitcher_prev1_game_success_rate")
+        p3 = col("asof_pitcher_prev3_game_success_rate")
+        p5 = col("asof_pitcher_prev5_game_success_rate")
+        m1 = col("asof_pitcher_prev1_game_middle_rate")
+        m3 = col("asof_pitcher_prev3_game_middle_rate")
+        m5 = col("asof_pitcher_prev5_game_middle_rate")
+        derived = {
+            "derived_recent_success_mean": .2 * p1 + .3 * p3 + .5 * p5,
+            "derived_recent_success_short": .5 * p1 + .5 * p3,
+            "derived_success_trend_1_3": p1 - p3,
+            "derived_success_trend_3_5": p3 - p5,
+            "derived_success_trend_1_5": p1 - p5,
+            "derived_success_range": np.nanmax(np.column_stack([p1, p3, p5]), axis=1)
+            - np.nanmin(np.column_stack([p1, p3, p5]), axis=1),
+            "derived_recent_middle_mean": .2 * m1 + .3 * m3 + .5 * m5,
+            "derived_middle_trend_1_3": m1 - m3,
+            "derived_middle_trend_3_5": m3 - m5,
+            "derived_middle_trend_1_5": m1 - m5,
+            "derived_middle_range": np.nanmax(np.column_stack([m1, m3, m5]), axis=1)
+            - np.nanmin(np.column_stack([m1, m3, m5]), axis=1),
+            "derived_recent_success_minus_career": p5 - col("asof_pitcher_success_rate"),
+            "derived_recent_middle_minus_career": m5 - col("asof_pitcher_middle_rate"),
+            "derived_recent_success_minus_batter": p5 - col("asof_batter_success_rate"),
+            "derived_pitcher_batter_success_diff": col("asof_pitcher_success_rate")
+            - col("asof_batter_success_rate"),
+            "derived_reverse_middle_sum": col("asof_pitcher_reverse_rate")
+            + col("asof_pitcher_middle_rate"),
+            "derived_failure_proxy": col("asof_pitcher_reverse_rate")
+            + col("asof_pitcher_middle_rate") + col("asof_pitcher_ball_rate"),
+            "derived_ball_strike_diff": col("asof_pitcher_ball_rate")
+            - col("asof_pitcher_strike_rate"),
+            "derived_pitchmix_entropy": -np.nansum(
+                np.clip(np.column_stack([
+                    col("asof_pitcher_fastball_rate"),
+                    col("asof_pitcher_breaking_rate"),
+                    col("asof_pitcher_offspeed_rate"),
+                ]), 1e-6, None) * np.log(np.clip(np.column_stack([
+                    col("asof_pitcher_fastball_rate"),
+                    col("asof_pitcher_breaking_rate"),
+                    col("asof_pitcher_offspeed_rate"),
+                ]), 1e-6, None)), axis=1,
+            ),
+            "derived_pitchmix_max": np.nanmax(np.column_stack([
+                col("asof_pitcher_fastball_rate"),
+                col("asof_pitcher_breaking_rate"),
+                col("asof_pitcher_offspeed_rate"),
+            ]), axis=1),
+        }
+        return derived[name]
     value = pd.to_numeric(frame[name], errors="coerce").to_numpy(np.float64)
     if name in LOG_FEATURES:
         value = np.log1p(np.maximum(value, 0.))
