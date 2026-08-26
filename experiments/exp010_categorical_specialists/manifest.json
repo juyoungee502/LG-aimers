@@ -10,7 +10,7 @@
   "train_seasons": [2019, 2020, 2021, 2022, 2023, 2024],
   "validation_seasons": [2023, 2024],
   "seed": 20260826,
-  "metrics": {"bss_2023": 0.0, "raw_bss_2023": -491.08, "bss_2024": 911.61, "public_score": null},
+  "metrics": {"bss_2023": 0.0, "raw_bss_2023": -491.08, "bss_2024": 911.61, "public_score": 1028.0},
   "artifacts": ["submit/model/metadata.json", "outputs/v10_oof_predictions.npz", "submission_v10.zip"],
   "reproduce": "bash run_v10.sh 0",
   "notes": "Extends the useful categorical diversity model with gated specialists; four-candidate segment simplex optimization can assign the new expert zero weight."

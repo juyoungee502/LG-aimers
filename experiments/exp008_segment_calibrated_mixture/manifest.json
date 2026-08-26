@@ -10,7 +10,7 @@
   "train_seasons": [2019, 2020, 2021, 2022, 2023, 2024],
   "validation_seasons": [2023, 2024],
   "seed": 20260826,
-  "metrics": {"bss_2023": 0.0, "raw_bss_2023": -463.45, "bss_2024": 904.35, "public_score": null},
+  "metrics": {"bss_2023": 0.0, "raw_bss_2023": -463.45, "bss_2024": 904.35, "public_score": 1009.0},
   "artifacts": ["submit/model/metadata.json", "outputs/v8_oof_predictions.npz", "submission_v8.zip"],
   "reproduce": "bash run_v8.sh 0",
   "notes": "V7 OOF selected 87.34% specialist outside two strikes and 0% specialist at two strikes; independent segment calibration raises replayed 2024 OOF from 894.94 to 905.21."

@@ -1,0 +1,12 @@
+{
+  "experiment_id": "exp012_transferred_residual_effects",
+  "owner": "JunseoPark543",
+  "branch": "experiment/junseo-catboost-gpu",
+  "status": "implemented_not_built",
+  "model": "v11 plus empirical-Bayes OOF residual main and pitcher-context effects",
+  "validation_seasons": [2023, 2024],
+  "metrics": {"transferred_bss_2024": 960.11, "delta_vs_v11": 47.07, "public_score": null},
+  "artifacts": ["submit/model/metadata.json", "outputs/v12_oof_predictions.npz", "submission_v12.zip"],
+  "reproduce": "bash run_v12.sh",
+  "notes": "Build tables from 2023 OOF residuals and apply to 2024 for leakage-free transfer validation; final tables use 2023+2024 OOF residuals and row-local lookup only."
+}

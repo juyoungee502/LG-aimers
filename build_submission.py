@@ -21,16 +21,19 @@ def main():
     p.add_argument("--submit-dir", default="submit")
     p.add_argument("--output", default="submission_v3.zip")
     args = p.parse_args(); root = Path(args.submit_dir)
-    required = [root / "script.py", root / "requirements.txt", Path("feature_engineering.py")] + [root / "model" / n for n in REQUIRED_MODELS]
+    required = [
+        root / "script.py", root / "requirements.txt", Path("feature_engineering.py"),
+        Path("residual_effects.py"),
+    ] + [root / "model" / n for n in REQUIRED_MODELS]
     missing = [str(path) for path in required if not path.is_file()]
     if missing: raise FileNotFoundError(f"Missing submission files: {missing}")
     metadata = json.loads((root / "model" / "metadata.json").read_text(encoding="utf-8"))
-    if metadata.get("version") != "v11_brier_regression":
+    if metadata.get("version") != "v12_transferred_residual_effects":
         raise ValueError(f"Unexpected model version: {metadata.get('version')}")
     output = Path(args.output)
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
         for path in required:
-            arcname = path.name if path == Path("feature_engineering.py") else path.relative_to(root).as_posix()
+            arcname = path.name if path in (Path("feature_engineering.py"), Path("residual_effects.py")) else path.relative_to(root).as_posix()
             archive.write(path, arcname)
     print(f"Created {output.resolve()} ({output.stat().st_size / 1024**2:.2f} MiB)")
     with zipfile.ZipFile(output) as archive:

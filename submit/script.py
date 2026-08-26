@@ -18,6 +18,7 @@ from feature_engineering import (
     HistoryTables, add_inference_component_features, add_state_interactions,
     engineer_features, inference_history_arrays,
 )
+from residual_effects import apply_residual_effects
 
 
 ID_COL = "row_id"
@@ -314,6 +315,8 @@ def main():
             + segment_weights["brier_regressor"] * brier_prediction[mask]
         )
         prediction[mask] = params["intercept"] + params["slope"] * raw_prediction
+    residual_adjustment, _ = apply_residual_effects(test, bundle["residual_effects"])
+    prediction += residual_adjustment
     prediction = np.clip(prediction, *bundle["clip"])
     if len(prediction) != len(test) or not np.isfinite(prediction).all():
         raise ValueError("Invalid prediction length or non-finite prediction")
