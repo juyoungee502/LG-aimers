@@ -15,5 +15,5 @@
     "blend_weight": 0.35,
     "inference_rule": "frozen 2019-2024 Trackman lookup; no evaluation aggregation"
   },
-  "public_score": null
+  "public_score": 1076
 }

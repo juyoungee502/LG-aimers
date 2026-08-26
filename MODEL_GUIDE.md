@@ -57,7 +57,8 @@ tables from the most recent 2024 OOF residuals; this beat the two-season source 
 the three latest rolling transfers. Deterministic table geometry reshapes the batter
 effect and adds player-exposure directions. The final inference remains a frozen,
 row-independent lookup using only the current row's keys. Diagnostics are saved to
-`outputs/v17_oof_predictions.npz`.
+`outputs/v17_oof_predictions.npz`. V17 received 1076 on the public leaderboard
+(submitted by the project owner).
 The builder checks the model version and expected file layout before producing
 the ZIP.
 

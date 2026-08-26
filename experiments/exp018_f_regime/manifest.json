@@ -1,0 +1,10 @@
+{
+  "experiment_id": "exp018_f_regime",
+  "version": "v18",
+  "status": "candidate",
+  "parent": "exp017_trackman_context",
+  "validation": "post-break 2023 F to 2024 F, plus two contiguous 2024 halves",
+  "method": "three-seed numeric CatBoost trained only on 2023+ Futures-regime rows; F-only logit blend",
+  "blend_weight": 0.35,
+  "public_score": null
+}

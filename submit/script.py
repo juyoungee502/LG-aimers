@@ -247,6 +247,7 @@ def main():
         "categorical_count_two_strike": [],
         "brier_regressor": [],
         "trackman_context": [],
+        "f_regime": [],
     }
     for index in range(3):
         model = CatBoostClassifier()
@@ -294,6 +295,12 @@ def main():
                 model_dir, f"catboost_trackman_context_{index}.cbm"
             ))
             models["trackman_context"].append(trackman_model)
+        if "f_regime_specialist" in bundle.get("model_names", []):
+            f_model = CatBoostClassifier()
+            f_model.load_model(os.path.join(
+                model_dir, f"catboost_f_regime_{index}.cbm"
+            ))
+            models["f_regime"].append(f_model)
     print("Model version:", bundle["version"])
     test = pd.read_csv(test_path, encoding="utf-8-sig")
     if ID_COL not in test.columns or test[ID_COL].duplicated().any():
@@ -415,6 +422,26 @@ def main():
             + weight * logit(trackman_prediction[regular])
         )
         prediction = sigmoid(combined_logit)
+    if models["f_regime"]:
+        configuration = bundle["f_regime"]
+        expected_f = configuration["model_feature_columns"]
+        if list(features.columns) != expected_f:
+            raise ValueError("F-regime specialist feature order differs from training")
+        f_rows = test["game_type"].astype(str).eq(
+            configuration.get("game_type", "F")
+        ).to_numpy()
+        if f_rows.any():
+            f_prediction = np.mean([
+                model.predict_proba(features.loc[f_rows])[:, 1]
+                for model in models["f_regime"]
+            ], axis=0)
+            weight = float(configuration["blend_weight"])
+            combined_logit = logit(prediction[f_rows])
+            combined_logit = (
+                (1.0 - weight) * combined_logit
+                + weight * logit(f_prediction)
+            )
+            prediction[f_rows] = sigmoid(combined_logit)
     prediction = np.clip(prediction, *bundle["clip"])
     if len(prediction) != len(test) or not np.isfinite(prediction).all():
         raise ValueError("Invalid prediction length or non-finite prediction")

@@ -27,25 +27,29 @@ def main():
         "v14_weighted_catboost", "v15_weighted_categorical_specialist",
         "v16_pitch_failure_prior",
         "v17_trackman_context",
+        "v18_f_regime",
     ):
         model_names.extend(f"catboost_weighted_{index}.cbm" for index in range(3))
     if args.expected_version in (
         "v15_weighted_categorical_specialist", "v16_pitch_failure_prior",
         "v17_trackman_context",
+        "v18_f_regime",
     ):
         model_names.extend(
             f"catboost_weighted_categorical_{label}_{index}.cbm"
             for label in ("other", "two_strike") for index in range(3)
         )
-    if args.expected_version == "v17_trackman_context":
+    if args.expected_version in ("v17_trackman_context", "v18_f_regime"):
         model_names.extend(
             f"catboost_trackman_context_{index}.cbm" for index in range(3)
         )
+    if args.expected_version == "v18_f_regime":
+        model_names.extend(f"catboost_f_regime_{index}.cbm" for index in range(3))
     required = [
         root / "script.py", root / "requirements.txt", Path("feature_engineering.py"),
         Path("residual_effects.py"),
     ] + [root / "model" / n for n in model_names]
-    if args.expected_version == "v17_trackman_context":
+    if args.expected_version in ("v17_trackman_context", "v18_f_regime"):
         required.append(Path("trackman_context.py"))
     missing = [str(path) for path in required if not path.is_file()]
     if missing: raise FileNotFoundError(f"Missing submission files: {missing}")
