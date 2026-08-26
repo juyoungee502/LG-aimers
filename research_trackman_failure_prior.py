@@ -61,63 +61,66 @@ def aligned_history(root: Path, data: pd.DataFrame, labels: pd.DataFrame):
     return history.dropna(subset=["pitch_type_fine", *FAILURES])
 
 
-def wide_counts(frame, keys):
+def wide_counts(frame, keys, types=FINE_TYPES, type_column="pitch_type_fine"):
     table = (
-        frame.groupby([*keys, "pitch_type_fine"], observed=True, sort=False)
-        .size().unstack(fill_value=0).reindex(columns=FINE_TYPES, fill_value=0)
+        frame.groupby([*keys, type_column], observed=True, sort=False)
+        .size().unstack(fill_value=0).reindex(columns=types, fill_value=0)
     )
-    table.columns = [f"n_{name}" for name in FINE_TYPES]
+    table.columns = [f"n_{name}" for name in types]
     return table.reset_index()
 
 
-def selection_delta(history, rows, value_column, outcome_k, selection_k):
+def selection_delta(
+    history, rows, value_column, outcome_k, selection_k,
+    types=FINE_TYPES, type_column="pitch_type_fine",
+):
     """Expected relative outcome under context mix minus overall pitcher mix."""
-    source = history.dropna(subset=["pitch_type_fine", value_column]).copy()
+    source = history.dropna(subset=[type_column, value_column]).copy()
     source["relative"] = (
         source[value_column]
         - source.groupby("season", observed=True)[value_column].transform("mean")
     )
-    global_table = source.groupby("pitch_type_fine", observed=True)["relative"].agg(
+    global_table = source.groupby(type_column, observed=True)["relative"].agg(
         ["sum", "count"]
     )
     global_relative = {
         name: float(global_table.loc[name, "sum"] / global_table.loc[name, "count"])
-        if name in global_table.index else 0.0 for name in FINE_TYPES
+        if name in global_table.index else 0.0 for name in types
     }
     outcomes = source.groupby(
-        ["pitcher_id", "pitch_type_fine"], observed=True, sort=False,
+        ["pitcher_id", type_column], observed=True, sort=False,
     )["relative"].agg(["sum", "count"]).reset_index()
     outcomes["value"] = [
         (total + outcome_k * global_relative[name]) / (count + outcome_k)
         for total, count, name in zip(
-            outcomes["sum"], outcomes["count"], outcomes["pitch_type_fine"],
+            outcomes["sum"], outcomes["count"], outcomes[type_column],
         )
     ]
     outcomes = outcomes.pivot(
-        index="pitcher_id", columns="pitch_type_fine", values="value",
-    ).reindex(columns=FINE_TYPES).fillna(0.0)
-    outcomes.columns = [f"v_{name}" for name in FINE_TYPES]
+        index="pitcher_id", columns=type_column, values="value",
+    ).reindex(columns=types).fillna(0.0)
+    outcomes.columns = [f"v_{name}" for name in types]
     outcomes = outcomes.reset_index()
 
-    overall = wide_counts(source, ["pitcher_id"])
-    global_mix = source["pitch_type_fine"].value_counts(normalize=True)
-    count_columns = [f"n_{name}" for name in FINE_TYPES]
+    overall = wide_counts(source, ["pitcher_id"], types, type_column)
+    global_mix = source[type_column].value_counts(normalize=True)
+    count_columns = [f"n_{name}" for name in types]
     total = overall[count_columns].sum(axis=1).to_numpy(float)
-    for name in FINE_TYPES:
+    for name in types:
         overall[f"p_{name}"] = (
             overall[f"n_{name}"].to_numpy(float)
             + selection_k * float(global_mix.get(name, 0.0))
         ) / (total + selection_k)
 
     keys = ["pitcher_id", "batter_hand", "count_state"]
-    contextual = wide_counts(source, keys)
+    contextual = wide_counts(source, keys, types, type_column)
     contextual_total = contextual[count_columns].sum(axis=1).to_numpy(float)
-    probability_columns = [f"p_{name}" for name in FINE_TYPES]
+    probability_columns = [f"p_{name}" for name in types]
     contextual = contextual.merge(
         overall[["pitcher_id", *probability_columns]],
         on="pitcher_id", how="left",
     )
-    for name in FINE_TYPES:
+    for name in types:
         contextual[f"p_{name}"] = (
             contextual[f"n_{name}"].to_numpy(float)
             + selection_k * contextual[f"p_{name}"].fillna(
@@ -132,7 +135,7 @@ def selection_delta(history, rows, value_column, outcome_k, selection_k):
     base["base_expected"] = sum(
         base[f"p_{name}"].fillna(0.0)
         * base[f"v_{name}"].fillna(global_relative[name])
-        for name in FINE_TYPES
+        for name in types
     )
     query = rows.copy()
     if "count_state" not in query:
@@ -146,13 +149,13 @@ def selection_delta(history, rows, value_column, outcome_k, selection_k):
         base[["pitcher_id", "base_expected"]], on="pitcher_id", how="left",
         sort=False,
     )
-    for name in FINE_TYPES:
+    for name in types:
         query[f"p_{name}"] = query[f"p_{name}"].fillna(
             float(global_mix.get(name, 0.0))
         )
         query[f"v_{name}"] = query[f"v_{name}"].fillna(global_relative[name])
     expected = sum(
-        query[f"p_{name}"] * query[f"v_{name}"] for name in FINE_TYPES
+        query[f"p_{name}"] * query[f"v_{name}"] for name in types
     ).to_numpy(float)
     baseline = query["base_expected"].fillna(0.0).to_numpy(float)
     return (expected - baseline)[np.argsort(query["_order"].to_numpy())]
