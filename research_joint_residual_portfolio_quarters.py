@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from research_numeric_residual_tables import apply_effect, fit_effect
+from research_pair_residual_tables import apply_pair, fit_pair
 from research_residual_portfolio_v19 import apply_table, build_table, prepare
 
 
@@ -87,15 +88,43 @@ def main():
             )
             for label, (frame, _y, base, source) in blocks.items()
         }
-    keys = ["batter_id", "pitcher_hand"]
-    cat_tables = {label: build_table(frame, residual, keys, 400.)
+    categorical_reports = json.loads(
+        (root / "research/residual_portfolio_v19.json").read_text("utf-8")
+    )
+    best_categorical = {}
+    for row in categorical_reports:
+        best_categorical.setdefault(row["name"], row)
+    for name, config in best_categorical.items():
+        if config["min_transfer"] < .03:
+            continue
+        keys = config["keys"]
+        tables = {label: build_table(frame, residual, keys, float(config["shrink"]))
                   for label, (frame, residual, _base) in sources.items()}
-    candidates["categorical:batter_phand"] = {
-        label: .125 * np.where(
-            frame["game_type"].eq("R").to_numpy(),
-            apply_table(frame, cat_tables[source], keys), 0.,
-        ) for label, (frame, _y, _base, source) in blocks.items()
-    }
+        candidates[f"categorical:{name}"] = {
+            label: float(config["weight"]) * np.where(
+                frame["game_type"].eq("R").to_numpy(),
+                apply_table(frame, tables[source], keys), 0.,
+            ) for label, (frame, _y, _base, source) in blocks.items()
+        }
+
+    pair_reports = json.loads(
+        (root / "research/pair_residual_tables_v19.json").read_text("utf-8")
+    )
+    best_pairs = {}
+    for row in pair_reports:
+        best_pairs.setdefault((row["name"], row["context"]), row)
+    for (name, context), config in best_pairs.items():
+        if config["min_transfer"] < .03:
+            continue
+        pair = tuple(config["features"])
+        fitted = {label: fit_pair(frame, residual, base, pair, context,
+                                  int(config["n_bins"]), float(config["shrink"]))
+                  for label, (frame, residual, base) in sources.items()}
+        candidates[f"pair:{name}:{context}"] = {
+            label: float(config["weight"]) * apply_pair(
+                frame, base, pair, context, fitted[source]
+            ) for label, (frame, _y, base, source) in blocks.items()
+        }
 
     total = {label: np.zeros(len(frame), dtype=np.float64)
              for label, (frame, _y, _base, _source) in blocks.items()}
@@ -111,13 +140,17 @@ def main():
                         y, base, total[label] + scale * candidates[name][label]
                     )
                     marginal[label] = new[label] - total_gains[label]
-                if min(marginal.values()) < -1e-9:
+                # Individual effects may trade a little gain from an easy block
+                # to improve the bottleneck.  The completed portfolio itself,
+                # however, must remain positive on every quarter.
+                if min(new.values()) < -1e-9:
                     continue
                 rank = (min(new.values()), float(np.mean(list(new.values()))),
                         min(marginal.values()))
                 if winner is None or rank > winner[0]:
                     winner = (rank, name, scale, new, marginal)
-        if winner is None or min(winner[4].values()) < .01:
+        previous_min = min(total_gains.values())
+        if winner is None or min(winner[3].values()) <= previous_min + .01:
             break
         _rank, name, scale, new, marginal = winner
         for label in blocks:
