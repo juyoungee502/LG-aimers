@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from catboost import CatBoostClassifier
 
+from failure_context import prior_season_context
 from feature_engineering import (
     TARGET_COL, add_state_interactions, add_training_component_features,
     engineer_features, training_history_arrays,
@@ -49,6 +50,9 @@ def parameters(seed, variant):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--valid-year", type=int, default=2024, choices=(2023, 2024))
+    parser.add_argument(
+        "--feature-set", choices=("current", "prior_context"), default="current"
+    )
     args = parser.parse_args()
     valid_year = args.valid_year
     root = Path(__file__).resolve().parent
@@ -60,6 +64,13 @@ def main():
     features = engineer_features(raw, *bases, global_prior=float(target.mean()))
     add_training_component_features(features, raw)
     features = add_state_interactions(features)
+    if args.feature_set == "prior_context":
+        features = pd.concat([
+            features,
+            prior_season_context(
+                pd.concat([raw, target_series.rename(TARGET_COL)], axis=1), labels,
+            ),
+        ], axis=1)
     for column in CAT_COLUMNS:
         features[column] = features[column].fillna(-1).astype(np.int32)
     seasons = raw["season"].to_numpy(np.int16)
@@ -119,7 +130,8 @@ def main():
                     - bss(y[halfway:], base[halfway:]),
                 ]
                 reports.append({
-                    "variant": variant, "weight_all": float(weight_all),
+                    "variant": variant, "feature_set": args.feature_set,
+                    "weight_all": float(weight_all),
                     "weight_middle": float(weight_middle), "gain_2024": gains[0],
                     "gain_first_half": gains[1], "gain_second_half": gains[2],
                     "min_half": min(gains[1:]),
@@ -127,10 +139,12 @@ def main():
                     "p_middle_bss": bss(y, p_middle),
                 })
     reports.sort(key=lambda row: (row["min_half"], row["gain_2024"]), reverse=True)
-    output = root / "research" / f"failure_specialists_{valid_year}.npz"
+    suffix = "" if args.feature_set == "current" else f"_{args.feature_set}"
+    output = root / "research" / f"failure_specialists_{valid_year}{suffix}.npz"
     output.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         output, variants=np.asarray(variants),
+        feature_set=np.asarray(args.feature_set),
         predictions=np.stack([variant_predictions[name] for name in variants]),
         target=y.astype(np.float32), base=base.astype(np.float32),
         reports_json=np.asarray(json.dumps(reports)),
