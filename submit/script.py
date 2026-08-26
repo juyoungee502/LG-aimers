@@ -196,8 +196,7 @@ def build_features_v4(df, bundle):
     bases = inference_history_arrays(df, history)
     out = engineer_features(df, *bases, global_prior=history.global_prior)
     add_inference_component_features(out, df, history)
-    add_state_interactions(out)
-    out = out.copy()
+    out = add_state_interactions(out)
     expected = bundle["feature_columns"]
     missing = [c for c in expected if c not in out]
     unexpected = [c for c in out if c not in expected]

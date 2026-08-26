@@ -163,8 +163,7 @@ def main() -> None:
     bases = training_history_arrays(raw, y_series)
     x = engineer_features(raw, *bases, global_prior=float(y.mean()))
     add_training_component_features(x, raw)
-    add_state_interactions(x)
-    x = x.copy()  # defragment after adding many state columns
+    x = add_state_interactions(x)
     for col in CAT_COLUMNS: x[col] = x[col].fillna(-1).astype(np.int32)
     years = raw["season"].to_numpy(np.int16)
 
