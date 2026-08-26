@@ -5,6 +5,12 @@ import numpy as np
 import pandas as pd
 
 
+BASE_MAP = {
+    "___": 0, "1__": 1, "_2_": 2, "__3": 3,
+    "12_": 4, "1_3": 5, "_23": 6, "123": 7,
+}
+
+
 def history_expert(features, prior):
     specs = (
         ("asof_pitcher_prev1_game_success_rate", .12),
@@ -45,6 +51,17 @@ def _gate(frame, name):
             frame["num_runners_on"], errors="coerce"
         ).fillna(0).to_numpy(np.int32)
         return regular & (runners == int(name.rsplit("_", 1)[1]))
+    if name.startswith("regular_baseout_"):
+        base = frame["base_state"].map(BASE_MAP).fillna(-1).to_numpy(np.int32)
+        outs = pd.to_numeric(
+            frame["outs_before"], errors="coerce"
+        ).fillna(0).to_numpy(np.int32)
+        return regular & (base * 3 + outs == int(name.rsplit("_", 1)[1]))
+    if name.startswith("regular_score_"):
+        score = pd.to_numeric(
+            frame["score_diff_pitcher_team"], errors="coerce"
+        ).fillna(0).clip(-3, 3).to_numpy(np.int32)
+        return regular & (score == int(name.rsplit("_", 1)[1]) - 3)
     raise ValueError(f"Unknown component residual gate: {name}")
 
 

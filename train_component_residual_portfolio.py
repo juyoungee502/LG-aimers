@@ -16,19 +16,28 @@ from train_robust_residual_portfolio import freeze as freeze_v21
 SELECTED = (
     ("brier_regressor", "other", .50),
     ("weighted_catboost", "two_strike", .25),
-    ("categorical_count_expert", "other", .25),
-    ("categorical_count_expert", "regular_count_1", .25),
-    ("history_expert", "regular_count_2", .25),
-    ("pre_specialist_blend", "regular_runners_1", .25),
+    ("weighted_categorical_specialist", "regular_score_1", .25),
     ("pre_specialist_blend", "regular_count_9", .25),
-    ("count_expert", "regular_count_1", .25),
+    ("categorical_count_expert", "regular_count_1", .25),
+    ("pre_specialist_blend", "regular_baseout_8", .25),
+    ("history_expert", "regular_count_2", .25),
+    ("weighted_catboost", "regular_baseout_7", .25),
+    ("pre_specialist_blend", "two_strike", .25),
     ("count_expert", "regular_count_11", .25),
+    ("catboost", "regular_baseout_20", .25),
+    ("count_expert", "regular_count_1", .25),
+    ("categorical_count_expert", "other", .25),
+    ("history_expert", "regular_baseout_20", .25),
     ("brier_regressor", "regular_count_1", .25),
+    ("history_expert", "regular_baseout_5", .25),
+    ("weighted_catboost", "regular_baseout_23", .25),
+    ("history_expert", "regular_baseout_21", .25),
     ("categorical_catboost", "regular_count_1", .25),
-    ("categorical_count_expert", "regular_runners_2", .25),
     ("categorical_catboost", "regular_count_5", .25),
-    ("pre_specialist_blend", "f_regime", .25),
-    ("history_expert", "regular_count_9", .25),
+    ("pre_specialist_blend", "regular_baseout_18", .25),
+    ("categorical_count_expert", "regular_runners_2", .25),
+    ("categorical_count_expert", "regular_score_1", .25),
+    ("brier_regressor", "regular_baseout_5", .25),
 )
 
 
@@ -59,6 +68,14 @@ def gate(frame, name):
     if name.startswith("regular_runners_"):
         runners = frame["runner_count_code"].to_numpy()
         return regular & (runners == int(name.rsplit("_", 1)[1]))
+    if name.startswith("regular_baseout_"):
+        return regular & (
+            frame["base_out_state"].to_numpy() == int(name.rsplit("_", 1)[1])
+        )
+    if name.startswith("regular_score_"):
+        return regular & (
+            frame["score_bucket"].to_numpy() == int(name.rsplit("_", 1)[1]) - 3
+        )
     raise ValueError(name)
 
 
@@ -120,7 +137,7 @@ def main():
         ],
         "validation_effects": validation_config["effects"],
     }
-    if report["v22_bss"] < 985.2 or min(report["gain"], *report["quarter_gains"]) <= 0.:
+    if report["v22_bss"] < 987.4 or min(report["gain"], *report["quarter_gains"]) <= 0.:
         raise RuntimeError(f"Component portfolio failed promotion: {report}")
     print(f"v22 validation: {json.dumps(report)}", flush=True)
 
@@ -136,6 +153,7 @@ def main():
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     if metadata.get("version") not in (
         "v21_robust_residual_portfolio", "v22_component_residual_portfolio",
+        "v23_probability_residual_portfolio",
     ):
         raise ValueError(f"Expected v21/v22 metadata, got {metadata.get('version')}")
     metadata["version"] = "v22_component_residual_portfolio"

@@ -495,6 +495,8 @@ def main():
         component_predictions = {
             "brier_regressor": brier_prediction,
             "weighted_catboost": weighted_cat_prediction,
+            "weighted_categorical_specialist": weighted_categorical_prediction,
+            "catboost": cat_prediction,
             "categorical_count_expert": categorical_count_prediction,
             "history_expert": history_expert(features, bundle["history"]["global_prior"]),
             "pre_specialist_blend": pre_specialist_prediction,
