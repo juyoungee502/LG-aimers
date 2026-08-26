@@ -358,6 +358,20 @@ def main():
         prediction[mask] = params["intercept"] + params["slope"] * raw_prediction
     residual_adjustment, _ = apply_residual_effects(test, bundle["residual_effects"])
     prediction += residual_adjustment
+    pitch_prior = bundle.get("pitch_failure_prior")
+    if pitch_prior is not None:
+        lookup = dict(zip(pitch_prior["keys"], pitch_prior["deltas"]))
+        count_state = test["balls_before"] * 3 + test["strikes_before"]
+        keys = (
+            test["pitcher_id"].astype(str) + ":"
+            + test["batter_hand"].astype(str) + ":"
+            + count_state.astype(str)
+        )
+        correction = keys.map(lookup).fillna(0.).to_numpy(np.float64)
+        correction[test["game_type"].astype(str).ne(
+            pitch_prior.get("game_type", "R")
+        ).to_numpy()] = 0.
+        prediction += correction
     prediction = np.clip(prediction, *bundle["clip"])
     if len(prediction) != len(test) or not np.isfinite(prediction).all():
         raise ValueError("Invalid prediction length or non-finite prediction")

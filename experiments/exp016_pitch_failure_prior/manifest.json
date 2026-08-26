@@ -1,0 +1,17 @@
+{
+  "id": "exp016_pitch_failure_prior",
+  "version": "v16",
+  "status": "candidate",
+  "parent": "exp015_weighted_categorical_specialist",
+  "changes": [
+    "Reconstruct 99.793% of historical coarse pitch types and detailed failure labels from next as-of counter increments",
+    "Add a frozen pitcher x batter-hand x count pitch-choice failure correction",
+    "Freeze the correction center from the 2024 training proxy so inference remains row-independent"
+  ],
+  "validation": {
+    "screen_gain_2023": 13.6770,
+    "screen_gain_2024": 8.6490,
+    "screening_center": "fold mean; final acceptance requires prior-season fixed center"
+  },
+  "public_score": null
+}
