@@ -23,6 +23,7 @@ from trackman_context import apply_frozen_context
 from failure_context import apply_frozen_context as apply_frozen_failure_context
 from residual_portfolio import apply_frozen_portfolio
 from component_residual_portfolio import apply_component_portfolio, history_expert
+from probability_residual_portfolio import apply_probability_portfolio
 
 
 ID_COL = "row_id"
@@ -503,6 +504,10 @@ def main():
         prediction += apply_component_portfolio(
             test, component_predictions, pre_portfolio_prediction,
             bundle["component_residual_portfolio"],
+        )
+    if "probability_residual_portfolio" in bundle:
+        prediction += apply_probability_portfolio(
+            test, prediction, bundle["probability_residual_portfolio"],
         )
     prediction = np.clip(prediction, *bundle["clip"])
     if len(prediction) != len(test) or not np.isfinite(prediction).all():
