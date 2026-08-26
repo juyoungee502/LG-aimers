@@ -1,0 +1,10 @@
+{
+  "experiment_id": "exp019_failure_specialist",
+  "version": "v19",
+  "status": "candidate",
+  "parent": "exp018_f_regime",
+  "validation": "rolling 2023 and 2024, each split into two contiguous halves",
+  "method": "reconstructed reverse/middle/wayoff multi-task experts with frozen prior-season contexts; R-only logit blend",
+  "weights": {"all_success": 0.20, "non_middle": 0.015},
+  "public_score": null
+}

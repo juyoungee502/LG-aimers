@@ -28,29 +28,38 @@ def main():
         "v16_pitch_failure_prior",
         "v17_trackman_context",
         "v18_f_regime",
+        "v19_failure_specialist",
     ):
         model_names.extend(f"catboost_weighted_{index}.cbm" for index in range(3))
     if args.expected_version in (
         "v15_weighted_categorical_specialist", "v16_pitch_failure_prior",
         "v17_trackman_context",
         "v18_f_regime",
+        "v19_failure_specialist",
     ):
         model_names.extend(
             f"catboost_weighted_categorical_{label}_{index}.cbm"
             for label in ("other", "two_strike") for index in range(3)
         )
-    if args.expected_version in ("v17_trackman_context", "v18_f_regime"):
+    if args.expected_version in ("v17_trackman_context", "v18_f_regime", "v19_failure_specialist"):
         model_names.extend(
             f"catboost_trackman_context_{index}.cbm" for index in range(3)
         )
-    if args.expected_version == "v18_f_regime":
+    if args.expected_version in ("v18_f_regime", "v19_failure_specialist"):
         model_names.extend(f"catboost_f_regime_{index}.cbm" for index in range(3))
+    if args.expected_version == "v19_failure_specialist":
+        model_names.extend(
+            f"catboost_failure_{label}.cbm"
+            for label in ("reverse", "middle", "wayoff")
+        )
     required = [
         root / "script.py", root / "requirements.txt", Path("feature_engineering.py"),
         Path("residual_effects.py"),
     ] + [root / "model" / n for n in model_names]
-    if args.expected_version in ("v17_trackman_context", "v18_f_regime"):
+    if args.expected_version in ("v17_trackman_context", "v18_f_regime", "v19_failure_specialist"):
         required.append(Path("trackman_context.py"))
+    if args.expected_version == "v19_failure_specialist":
+        required.append(Path("failure_context.py"))
     missing = [str(path) for path in required if not path.is_file()]
     if missing: raise FileNotFoundError(f"Missing submission files: {missing}")
     metadata = json.loads((root / "model" / "metadata.json").read_text(encoding="utf-8"))
@@ -61,7 +70,7 @@ def main():
         for path in required:
             arcname = path.name if path in (
                 Path("feature_engineering.py"), Path("residual_effects.py"),
-                Path("trackman_context.py"),
+                Path("trackman_context.py"), Path("failure_context.py"),
             ) else path.relative_to(root).as_posix()
             archive.write(path, arcname)
     print(f"Created {output.resolve()} ({output.stat().st_size / 1024**2:.2f} MiB)")

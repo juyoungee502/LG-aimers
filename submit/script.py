@@ -20,6 +20,7 @@ from feature_engineering import (
 )
 from residual_effects import apply_residual_effects
 from trackman_context import apply_frozen_context
+from failure_context import apply_frozen_context as apply_frozen_failure_context
 
 
 ID_COL = "row_id"
@@ -248,6 +249,7 @@ def main():
         "brier_regressor": [],
         "trackman_context": [],
         "f_regime": [],
+        "failure": {},
     }
     for index in range(3):
         model = CatBoostClassifier()
@@ -301,6 +303,13 @@ def main():
                 model_dir, f"catboost_f_regime_{index}.cbm"
             ))
             models["f_regime"].append(f_model)
+    if "failure_specialist" in bundle.get("model_names", []):
+        for label in bundle["failure_specialist"]["labels"]:
+            failure_model = CatBoostClassifier()
+            failure_model.load_model(os.path.join(
+                model_dir, f"catboost_failure_{label}.cbm"
+            ))
+            models["failure"][label] = failure_model
     print("Model version:", bundle["version"])
     test = pd.read_csv(test_path, encoding="utf-8-sig")
     if ID_COL not in test.columns or test[ID_COL].duplicated().any():
@@ -325,6 +334,19 @@ def main():
             model.predict_proba(trackman_features)[:, 1]
             for model in models["trackman_context"]
         ], axis=0)
+    failure_prediction = None
+    if models["failure"]:
+        configuration = bundle["failure_specialist"]
+        failure_context = apply_frozen_failure_context(test, configuration)
+        failure_features = pd.concat([
+            features.reset_index(drop=True), failure_context.reset_index(drop=True),
+        ], axis=1)
+        if list(failure_features.columns) != configuration["model_feature_columns"]:
+            raise ValueError("Failure specialist feature order differs from training")
+        failure_prediction = np.column_stack([
+            models["failure"][label].predict_proba(failure_features)[:, 1]
+            for label in configuration["labels"]
+        ])
 
     cat_prediction = np.mean(
         [model.predict_proba(features)[:, 1] for model in models["catboost"]], axis=0
@@ -442,6 +464,26 @@ def main():
                 + weight * logit(f_prediction)
             )
             prediction[f_rows] = sigmoid(combined_logit)
+    if failure_prediction is not None:
+        configuration = bundle["failure_specialist"]
+        regular = test["game_type"].astype(str).eq(
+            configuration.get("game_type", "R")
+        ).to_numpy()
+        if regular.any():
+            p_all = np.clip(
+                1. - failure_prediction[:, 0] - failure_prediction[:, 1]
+                - failure_prediction[:, 2], RATE_EPS, 1. - RATE_EPS,
+            )
+            p_middle = np.clip(
+                1. - failure_prediction[:, 1], RATE_EPS, 1. - RATE_EPS,
+            )
+            weight_all = float(configuration["weight_all"])
+            weight_middle = float(configuration["weight_middle"])
+            prediction[regular] = sigmoid(
+                (1. - weight_all - weight_middle) * logit(prediction[regular])
+                + weight_all * logit(p_all[regular])
+                + weight_middle * logit(p_middle[regular])
+            )
     prediction = np.clip(prediction, *bundle["clip"])
     if len(prediction) != len(test) or not np.isfinite(prediction).all():
         raise ValueError("Invalid prediction length or non-finite prediction")
