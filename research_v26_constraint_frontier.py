@@ -27,7 +27,7 @@ from research_v25_f_portfolio import curve, exact_metrics, masks
 ROOT = Path(__file__).resolve().parent
 
 
-def optimize_gain(curves, objective_curve, cap, seeds):
+def optimize_gain(curves, objective_curve, cap, seeds, floor=0.):
     width = len(objective_curve[0])
 
     def score(value, weights):
@@ -38,7 +38,10 @@ def optimize_gain(curves, objective_curve, cap, seeds):
         return -score(objective_curve, weights) + .001 * float(weights @ weights)
 
     constraints = [
-        {"type": "ineq", "fun": lambda weights, c=c: score(c, weights)}
+        {
+            "type": "ineq",
+            "fun": lambda weights, c=c: score(c, weights) - float(floor),
+        }
         for c in curves.values()
     ]
     constraints.append({
@@ -146,10 +149,22 @@ def frontier(regime, rows, numeric, categorical, context, y, base, year):
     seed = selected_seed(payload, regime, candidates)
 
     reports = []
-    for tier, constraints in constraint_tiers(all_curves).items():
+    tier_values = list(constraint_tiers(all_curves).items())
+    floors = (3., 5., 7., 10.) if regime == "R" else (5., 10., 15., 20., 25.)
+    tier_values.extend(
+        (f"strict_floor_{floor:g}", dict(all_curves), floor) for floor in floors
+    )
+    for item in tier_values:
+        if len(item) == 2:
+            tier, constraints = item
+            floor = 0.
+        else:
+            tier, constraints, floor = item
         for cap in ((2.5, 4., 6.) if regime == "R" else (3., 4., 6.)):
             try:
-                result = optimize_gain(constraints, objective_curve, cap, [seed])
+                result = optimize_gain(
+                    constraints, objective_curve, cap, [seed], floor=floor,
+                )
             except RuntimeError as error:
                 reports.append({
                     "tier": tier, "cap": cap, "rounding": None,
@@ -175,6 +190,7 @@ def frontier(regime, rows, numeric, categorical, context, y, base, year):
                 ))
                 reports.append({
                     "tier": tier, "cap": cap, "rounding": rounding,
+                    "constraint_floor": floor,
                     "gain_2024": exact["2024/all"],
                     "min_all_transfer": min(
                         value for key, value in exact.items()
@@ -248,6 +264,7 @@ def main():
                 {
                     key: item.get(key) for key in (
                         "tier", "cap", "rounding", "gain_2024",
+                        "constraint_floor",
                         "min_all_transfer", "min_transfer_half",
                         "min_transfer_quarter", "min_strict", "weight_sum",
                         "error",
