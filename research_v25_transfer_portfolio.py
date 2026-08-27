@@ -165,14 +165,24 @@ def main():
             if candidate_key != key and family not in candidate_spec["column"].replace("_s25", "").replace("_s100", "").replace("_rate", "")
         }
 
-    # Full 2023 -> 2024 replay with F left exactly at v24.
+    # Full 2023 -> 2024 replay with F left exactly at v24.  Audit every prefix
+    # so a high aggregate gain cannot hide a late-month reversal.
     source = regular_indices[2023]
     valid = regular_indices[2024]
     full_correction = np.zeros(len(valid), dtype=float)
+    prefix_audits = []
     for item in selected:
         full_correction += direction(
             item["spec"], source, valid, numeric, categorical, target, base,
         )
+        prefix_candidate = np.clip(base[valid] + full_correction, .005, .995)
+        prefix_audits.append({
+            "step": item["step"], "spec": item["spec"],
+            "detail": detail(
+                target[valid], base[valid], prefix_candidate,
+                rows.iloc[valid].reset_index(drop=True),
+            ),
+        })
     regular_candidate = np.clip(base[valid] + full_correction, .005, .995)
     regular_detail = detail(
         target[valid], base[valid], regular_candidate,
@@ -188,6 +198,7 @@ def main():
     )
     result = {
         "candidate_count": len(candidates), "selected": selected,
+        "prefix_audits": prefix_audits,
         "transfer_gains": current_gains,
         "regular_2024_detail": regular_detail,
         "overall_2024_detail": overall_detail,
