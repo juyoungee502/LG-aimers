@@ -24,6 +24,10 @@ from failure_context import apply_frozen_context as apply_frozen_failure_context
 from residual_portfolio import apply_frozen_portfolio
 from component_residual_portfolio import apply_component_portfolio, history_expert
 from probability_residual_portfolio import apply_probability_portfolio
+from v24_robust_candidate import (
+    apply_frozen_command, apply_frozen_pressure, apply_resolution_center,
+    early_pitcher_gate,
+)
 
 
 ID_COL = "row_id"
@@ -253,6 +257,10 @@ def main():
         "trackman_context": [],
         "f_regime": [],
         "failure": {},
+        "v24_command_no_month": [],
+        "v24_command_full": [],
+        "v24_command_recent": [],
+        "v24_resolution": {},
     }
     for index in range(3):
         model = CatBoostClassifier()
@@ -306,6 +314,21 @@ def main():
                 model_dir, f"catboost_f_regime_{index}.cbm"
             ))
             models["f_regime"].append(f_model)
+        if "v24_robust_candidate" in bundle.get("model_names", []):
+            for label in ("no_month", "full", "recent"):
+                command_model = CatBoostClassifier()
+                command_model.load_model(os.path.join(
+                    model_dir, f"catboost_v24_command_{label}_{index}.cbm",
+                ))
+                models[f"v24_command_{label}"].append(command_model)
+            for mode in bundle["v24_robust_candidate"]["resolution"]["centers"]:
+                resolution_model = CatBoostRegressor()
+                resolution_model.load_model(os.path.join(
+                    model_dir, f"catboost_v24_resolution_{mode}_{index}.cbm",
+                ))
+                models["v24_resolution"].setdefault(mode, []).append(
+                    resolution_model,
+                )
     if "failure_specialist" in bundle.get("model_names", []):
         for label in bundle["failure_specialist"]["labels"]:
             failure_model = CatBoostClassifier()
@@ -325,6 +348,7 @@ def main():
         raise ValueError("Final feature order differs from training")
 
     trackman_prediction = None
+    trackman_features = None
     if models["trackman_context"]:
         context = apply_frozen_context(test, bundle["trackman_context"])
         trackman_features = pd.concat(
@@ -337,6 +361,57 @@ def main():
             model.predict_proba(trackman_features)[:, 1]
             for model in models["trackman_context"]
         ], axis=0)
+    v24_command_prediction = {}
+    v24_resolution_direction = {}
+    if "v24_robust_candidate" in bundle.get("model_names", []):
+        if trackman_prediction is None or trackman_features is None:
+            raise ValueError("v24 requires the frozen Trackman context specialist")
+        configuration = bundle["v24_robust_candidate"]
+        command = configuration["command"]
+        regular = test["game_type"].astype(str).eq(
+            configuration.get("game_type_regular", "R"),
+        ).to_numpy()
+        no_month_features = trackman_features.drop(columns=["game_month"])
+        if list(no_month_features.columns) != command["no_month_feature_columns"]:
+            raise ValueError("v24 no-month command feature order differs from training")
+        if regular.any():
+            selected = no_month_features.loc[regular]
+            v24_command_prediction["no_month"] = np.mean([
+                model.predict_proba(selected)[:, 1]
+                for model in models["v24_command_no_month"]
+            ], axis=0)
+            for label in ("full", "recent"):
+                lookup = apply_frozen_command(test, command[f"{label}_lookup"])
+                command_features = pd.concat([
+                    no_month_features.reset_index(drop=True),
+                    lookup.reset_index(drop=True),
+                ], axis=1)
+                if list(command_features.columns) != command[f"{label}_feature_columns"]:
+                    raise ValueError(
+                        f"v24 {label} command feature order differs from training"
+                    )
+                v24_command_prediction[label] = np.mean([
+                    model.predict_proba(command_features.loc[regular])[:, 1]
+                    for model in models[f"v24_command_{label}"]
+                ], axis=0)
+
+        futures = test["game_type"].astype(str).eq(
+            configuration.get("game_type_futures", "F"),
+        ).to_numpy()
+        if futures.any():
+            resolution = configuration["resolution"]
+            resolution_features = features.drop(columns=["season", "game_month"])
+            if list(resolution_features.columns) != resolution["model_feature_columns"]:
+                raise ValueError("v24 resolution feature order differs from training")
+            futures_rows = test.loc[futures].reset_index(drop=True)
+            for mode, center in resolution["centers"].items():
+                raw_prediction = np.mean([
+                    model.predict(resolution_features.loc[futures])
+                    for model in models["v24_resolution"][mode]
+                ], axis=0)
+                v24_resolution_direction[mode] = apply_resolution_center(
+                    futures_rows, raw_prediction, center,
+                )
     failure_prediction = None
     if models["failure"]:
         configuration = bundle["failure_specialist"]
@@ -510,6 +585,47 @@ def main():
     if "probability_residual_portfolio" in bundle:
         prediction += apply_probability_portfolio(
             test, prediction, bundle["probability_residual_portfolio"],
+        )
+    if "v24_robust_candidate" in bundle.get("model_names", []):
+        configuration = bundle["v24_robust_candidate"]
+        policy = configuration["policy"]
+        regular = test["game_type"].astype(str).eq(
+            configuration.get("game_type_regular", "R"),
+        ).to_numpy()
+        correction = np.full(
+            len(test), float(policy["global_logit_shift"]), dtype=np.float64,
+        )
+        if regular.any():
+            scale = float(configuration["command_blend_scale"])
+            old_logit = logit(trackman_prediction[regular])
+            no_month_logit = logit(v24_command_prediction["no_month"])
+            full_logit = logit(v24_command_prediction["full"])
+            recent_logit = logit(v24_command_prediction["recent"])
+            early = early_pitcher_gate(
+                test, configuration["pitcher_season_origins"],
+            )[regular].astype(float)
+            correction[regular] += scale * (
+                float(policy["command_no_month"]) * (no_month_logit - old_logit)
+                + early * float(policy["command_full"])
+                * (full_logit - no_month_logit)
+                + early * float(policy["command_recent"])
+                * (recent_logit - no_month_logit)
+            )
+        prediction = sigmoid(logit(prediction) + correction)
+        futures = test["game_type"].astype(str).eq(
+            configuration.get("game_type_futures", "F"),
+        ).to_numpy()
+        if futures.any():
+            for mode, weight_name in (
+                ("regime_count", "f_count"),
+                ("regime_count_hands", "f_hands"),
+                ("regime_count_runners", "f_runners"),
+            ):
+                prediction[futures] += (
+                    float(policy[weight_name]) * v24_resolution_direction[mode]
+                )
+        prediction += float(policy["pressure_hand"]) * apply_frozen_pressure(
+            test, configuration["pressure"],
         )
     prediction = np.clip(prediction, *bundle["clip"])
     if len(prediction) != len(test) or not np.isfinite(prediction).all():

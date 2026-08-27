@@ -23,6 +23,35 @@ python train.py --preset full --task-type GPU --devices 0
 For multiple GPUs, CatBoost accepts values such as `--devices 0:1` or
 `--devices 0-3`.
 
+## Current candidate (v24)
+
+V24 starts from the submitted v23 model (public score 1105) and adds only
+time-forward effects that improved both 2023 and 2024. Its fixed rounded policy
+replaces the month-sensitive Trackman specialist with a no-month command model,
+adds small prior-season command increments for early-season pitchers, resolves
+three within-context Futures residuals, and applies a heavily shrunk
+pitcher-by-pressure-by-batter-hand table. The audited BSS gains over v23 are
++39.40 for 2023 and +18.16 for 2024; every 2024 quarter, month block, and game
+type is positive. No 2025 Trackman data or evaluation-row aggregation is used.
+
+On the GPU server, training, validation, submission packaging, and the result
+bundle are produced by one command:
+
+```bash
+cd ~/바탕화면/LG-aimers
+git pull --ff-only origin experiment/junseo-catboost-gpu
+source .venv/bin/activate
+bash run_v24.sh
+```
+
+Copy the complete result bundle to the PC from PowerShell:
+
+```powershell
+scp "JunseoPark@sia-com3:~/바탕화면/LG-aimers/outputs/results_v24.zip" .
+```
+
+The code-submission file inside the bundle is `submission_v24.zip`.
+
 ## Recommended BSS ensemble (v17)
 
 The competition model is trained with rolling 2023/2024 validation and directly
