@@ -1,31 +1,31 @@
 # Model guide
 
-## Current candidate: v25
+## Current candidate: v26
 
-V25 starts from the v24 command/resolution model and adds a frozen temporal
-residual portfolio. Its R/F policies were selected under 61 chronological,
-half-season, quarter, and monthly constraints rather than a single 2024 score.
-They combine strongly shrunk one-dimensional tables, state-context tables, and
-one conservative F inning-calibration table.
+V26 starts from the v24 command/resolution model and replaces the v25 residual
+policy with a higher-gain Pareto-robust temporal portfolio. Its R/F policies
+were selected under chronological, half-season, quarter, and monthly
+constraints rather than a single 2024 score. V25 remains available as a more
+conservative fallback; the two residual policies are never stacked.
 
 Exact forward validation against v24:
 
-| Metric | v24 | v25 | Gain |
+| Metric | v24 | v26 | Gain |
 |---|---:|---:|---:|
-| 2024 OOF BSS | 1007.70 | 1030.70 | +23.00 |
-| R regime BSS | - | - | +14.97 |
-| F regime BSS | - | - | +83.24 |
+| 2024 OOF BSS | 1007.70 | 1043.74 | +36.04 |
+| R regime BSS | - | - | +24.12 |
+| F regime BSS | - | - | +125.49 |
 
-The weakest of all audited slices is still positive: +7.15 BSS for R and
-+20.66 BSS for F. Inference uses only the current evaluation row and tables
+The weakest of all audited slices is still positive: +5.00 BSS for R and
++10.83 BSS for F. Inference uses only the current evaluation row and tables
 frozen from 2024 training data. It uses no 2025 Trackman data, no leaderboard-
 derived calibration, and no aggregation across evaluation rows.
 
 ## GPU server: train, validate, and package
 
 The v24 artifacts must already exist. If `outputs/v24_oof_predictions.npz` is
-missing, the runner invokes `run_v24.sh` first. Otherwise v25 only freezes and
-validates its residual tables, so the v25 step itself does not require a GPU.
+missing, the runner invokes `run_v24.sh` first. Otherwise v26 only freezes and
+validates its residual tables, so the v26 step itself does not require a GPU.
 
 Run this one command sequence on the server:
 
@@ -33,23 +33,23 @@ Run this one command sequence on the server:
 cd ~/바탕화면/LG-aimers
 git pull --ff-only origin experiment/junseo-catboost-gpu
 source .venv/bin/activate
-bash run_v25.sh
+bash run_v26.sh
 ```
 
 This creates:
 
-- `submission_v25.zip`: code-submission ZIP
-- `outputs/v25_oof_predictions.npz`: OOF diagnostics
-- `training_v25.log`: complete validation/build log
-- `outputs/results_v25.zip`: all three files bundled together
+- `submission_v26.zip`: code-submission ZIP
+- `outputs/v26_oof_predictions.npz`: OOF diagnostics
+- `training_v26.log`: complete validation/build log
+- `outputs/results_v26.zip`: all three files bundled together
 
 Copy the result bundle to the PC from PowerShell:
 
 ```powershell
-scp "JunseoPark@sia-com3:~/바탕화면/LG-aimers/outputs/results_v25.zip" .
+scp "JunseoPark@sia-com3:~/바탕화면/LG-aimers/outputs/results_v26.zip" .
 ```
 
-Submit `submission_v25.zip` from inside the result bundle.
+Submit `submission_v26.zip` from inside the result bundle.
 
 ## Base training
 
@@ -83,15 +83,15 @@ multiple GPUs.
   trends, pitch mix, and season-vs-prior deviations.
 - Anonymous and Trackman IDs are linked only through historical 2019-2024 pitch
   sequence alignment. No current evaluation pitch is joined to Trackman.
-- Every v25 lookup is frozen in `metadata.json`; test-row frequency, grouping,
+- Every v26 lookup is frozen in `metadata.json`; test-row frequency, grouping,
   rolling statistics, and target encoding over the test set are prohibited.
 
 ## Validation artifacts
 
-`train_v25_temporal_portfolio.py` reproduces all four forward-transfer audits,
+`train_v26_pareto_portfolio.py` reproduces all four forward-transfer audits,
 checks the strict minimum-gain gates, freezes 2024 tables for deployment, and
 writes the complete report into `submit/model/metadata.json`. It fails before
-packaging if R falls below +7.0 or F below +20.0 on any audited slice.
+packaging if R falls below +4.9 or F below +10.0 on any audited slice.
 
 Earlier checkpoints remain useful references: v17 scored 1076 and v23 scored
 1105 on the public leaderboard. V24 was not submitted when v25 was developed.

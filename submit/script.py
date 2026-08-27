@@ -628,7 +628,11 @@ def main():
         prediction += float(policy["pressure_hand"]) * apply_frozen_pressure(
             test, configuration["pressure"],
         )
-    if "v25_temporal_portfolio" in bundle.get("model_names", []):
+    if "v26_pareto_portfolio" in bundle.get("model_names", []):
+        prediction += apply_temporal_portfolio(
+            test, features, prediction, bundle["v26_pareto_portfolio"],
+        )
+    elif "v25_temporal_portfolio" in bundle.get("model_names", []):
         prediction += apply_temporal_portfolio(
             test, features, prediction, bundle["v25_temporal_portfolio"],
         )

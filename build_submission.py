@@ -35,6 +35,7 @@ def main():
         "v23_probability_residual_portfolio",
         "v24_robust_command_resolution",
         "v25_strict_temporal_portfolio",
+        "v26_pareto_temporal_portfolio",
     ):
         model_names.extend(f"catboost_weighted_{index}.cbm" for index in range(3))
     if args.expected_version in (
@@ -48,23 +49,24 @@ def main():
         "v23_probability_residual_portfolio",
         "v24_robust_command_resolution",
         "v25_strict_temporal_portfolio",
+        "v26_pareto_temporal_portfolio",
     ):
         model_names.extend(
             f"catboost_weighted_categorical_{label}_{index}.cbm"
             for label in ("other", "two_strike") for index in range(3)
         )
-    if args.expected_version in ("v17_trackman_context", "v18_f_regime", "v19_failure_specialist", "v20_residual_portfolio", "v21_robust_residual_portfolio", "v22_component_residual_portfolio", "v23_probability_residual_portfolio", "v24_robust_command_resolution", "v25_strict_temporal_portfolio"):
+    if args.expected_version in ("v17_trackman_context", "v18_f_regime", "v19_failure_specialist", "v20_residual_portfolio", "v21_robust_residual_portfolio", "v22_component_residual_portfolio", "v23_probability_residual_portfolio", "v24_robust_command_resolution", "v25_strict_temporal_portfolio", "v26_pareto_temporal_portfolio"):
         model_names.extend(
             f"catboost_trackman_context_{index}.cbm" for index in range(3)
         )
-    if args.expected_version in ("v18_f_regime", "v19_failure_specialist", "v20_residual_portfolio", "v21_robust_residual_portfolio", "v22_component_residual_portfolio", "v23_probability_residual_portfolio", "v24_robust_command_resolution", "v25_strict_temporal_portfolio"):
+    if args.expected_version in ("v18_f_regime", "v19_failure_specialist", "v20_residual_portfolio", "v21_robust_residual_portfolio", "v22_component_residual_portfolio", "v23_probability_residual_portfolio", "v24_robust_command_resolution", "v25_strict_temporal_portfolio", "v26_pareto_temporal_portfolio"):
         model_names.extend(f"catboost_f_regime_{index}.cbm" for index in range(3))
-    if args.expected_version in ("v19_failure_specialist", "v20_residual_portfolio", "v21_robust_residual_portfolio", "v22_component_residual_portfolio", "v23_probability_residual_portfolio", "v24_robust_command_resolution", "v25_strict_temporal_portfolio"):
+    if args.expected_version in ("v19_failure_specialist", "v20_residual_portfolio", "v21_robust_residual_portfolio", "v22_component_residual_portfolio", "v23_probability_residual_portfolio", "v24_robust_command_resolution", "v25_strict_temporal_portfolio", "v26_pareto_temporal_portfolio"):
         model_names.extend(
             f"catboost_failure_{label}.cbm"
             for label in ("reverse", "middle", "wayoff")
         )
-    if args.expected_version in ("v24_robust_command_resolution", "v25_strict_temporal_portfolio"):
+    if args.expected_version in ("v24_robust_command_resolution", "v25_strict_temporal_portfolio", "v26_pareto_temporal_portfolio"):
         model_names.extend(
             f"catboost_v24_command_{label}_{index}.cbm"
             for label in ("no_month", "full", "recent") for index in range(3)
@@ -79,19 +81,21 @@ def main():
         root / "script.py", root / "requirements.txt", Path("feature_engineering.py"),
         Path("residual_effects.py"),
     ] + [root / "model" / n for n in model_names]
-    if args.expected_version in ("v17_trackman_context", "v18_f_regime", "v19_failure_specialist", "v20_residual_portfolio", "v21_robust_residual_portfolio", "v22_component_residual_portfolio", "v23_probability_residual_portfolio", "v24_robust_command_resolution", "v25_strict_temporal_portfolio"):
+    if args.expected_version in ("v17_trackman_context", "v18_f_regime", "v19_failure_specialist", "v20_residual_portfolio", "v21_robust_residual_portfolio", "v22_component_residual_portfolio", "v23_probability_residual_portfolio", "v24_robust_command_resolution", "v25_strict_temporal_portfolio", "v26_pareto_temporal_portfolio"):
         required.append(Path("trackman_context.py"))
-    if args.expected_version in ("v19_failure_specialist", "v20_residual_portfolio", "v21_robust_residual_portfolio", "v22_component_residual_portfolio", "v23_probability_residual_portfolio", "v24_robust_command_resolution", "v25_strict_temporal_portfolio"):
+    if args.expected_version in ("v19_failure_specialist", "v20_residual_portfolio", "v21_robust_residual_portfolio", "v22_component_residual_portfolio", "v23_probability_residual_portfolio", "v24_robust_command_resolution", "v25_strict_temporal_portfolio", "v26_pareto_temporal_portfolio"):
         required.append(Path("failure_context.py"))
-    if args.expected_version in ("v20_residual_portfolio", "v21_robust_residual_portfolio", "v22_component_residual_portfolio", "v23_probability_residual_portfolio", "v24_robust_command_resolution", "v25_strict_temporal_portfolio"):
+    if args.expected_version in ("v20_residual_portfolio", "v21_robust_residual_portfolio", "v22_component_residual_portfolio", "v23_probability_residual_portfolio", "v24_robust_command_resolution", "v25_strict_temporal_portfolio", "v26_pareto_temporal_portfolio"):
         required.append(Path("residual_portfolio.py"))
-    if args.expected_version in ("v22_component_residual_portfolio", "v23_probability_residual_portfolio", "v24_robust_command_resolution", "v25_strict_temporal_portfolio"):
+    if args.expected_version in ("v22_component_residual_portfolio", "v23_probability_residual_portfolio", "v24_robust_command_resolution", "v25_strict_temporal_portfolio", "v26_pareto_temporal_portfolio"):
         required.append(Path("component_residual_portfolio.py"))
-    if args.expected_version in ("v23_probability_residual_portfolio", "v24_robust_command_resolution", "v25_strict_temporal_portfolio"):
+    if args.expected_version in ("v23_probability_residual_portfolio", "v24_robust_command_resolution", "v25_strict_temporal_portfolio", "v26_pareto_temporal_portfolio"):
         required.append(Path("probability_residual_portfolio.py"))
-    if args.expected_version in ("v24_robust_command_resolution", "v25_strict_temporal_portfolio"):
+    if args.expected_version in ("v24_robust_command_resolution", "v25_strict_temporal_portfolio", "v26_pareto_temporal_portfolio"):
         required.append(Path("v24_robust_candidate.py"))
-    if args.expected_version == "v25_strict_temporal_portfolio":
+    if args.expected_version in (
+        "v25_strict_temporal_portfolio", "v26_pareto_temporal_portfolio",
+    ):
         required.append(Path("v25_temporal_portfolio.py"))
     missing = [str(path) for path in required if not path.is_file()]
     if missing: raise FileNotFoundError(f"Missing submission files: {missing}")
