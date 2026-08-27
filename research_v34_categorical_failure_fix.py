@@ -42,6 +42,7 @@ def arguments():
     parser.add_argument("--devices", default="0")
     parser.add_argument("--threads", type=int, default=-1)
     parser.add_argument("--iterations", type=int, default=1600)
+    parser.add_argument("--n-seeds", type=int, default=1)
     parser.add_argument(
         "--half-life", type=float, default=0.,
         help="Season half-life; zero preserves the legacy uniform weighting.",
@@ -173,13 +174,18 @@ def main():
             f"rows={int(usable.sum()):,}, features={features.shape[1]}",
             flush=True,
         )
-        model = CatBoostClassifier(**model_parameters(args, offset))
-        model.fit(
-            features.loc[usable], labels.loc[usable, label].to_numpy(np.int8),
-            sample_weight=sample_weight,
-            cat_features=list(LOW_CARD_CATEGORIES),
-        )
-        predictions[label] = model.predict_proba(features.loc[valid])[:, 1]
+        seed_predictions = []
+        for seed_index in range(args.n_seeds):
+            model = CatBoostClassifier(**model_parameters(
+                args, offset + 101 * seed_index,
+            ))
+            model.fit(
+                features.loc[usable], labels.loc[usable, label].to_numpy(np.int8),
+                sample_weight=sample_weight,
+                cat_features=list(LOW_CARD_CATEGORIES),
+            )
+            seed_predictions.append(model.predict_proba(features.loc[valid])[:, 1])
+        predictions[label] = np.mean(seed_predictions, axis=0)
 
     new_failure = np.clip(
         1. - sum(predictions[label] for label in LABELS), 1e-5, 1. - 1e-5,
@@ -208,6 +214,7 @@ def main():
         "valid_year": args.valid_year,
         "profile": args.profile,
         "iterations": args.iterations,
+        "n_seeds": args.n_seeds,
         "half_life": args.half_life,
         "features": int(features.shape[1]),
         "categorical_columns": list(LOW_CARD_CATEGORIES),
@@ -220,8 +227,10 @@ def main():
         "top": reports[:40],
     }
     weight_tag = "uniform" if args.half_life <= 0. else f"hl{args.half_life:g}"
+    seed_tag = "" if args.n_seeds == 1 else f"_s{args.n_seeds}"
     output = ROOT / "research" / (
-        f"v34_categorical_failure_{args.profile}_{weight_tag}_{args.valid_year}.npz"
+        f"v34_categorical_failure_{args.profile}_{weight_tag}"
+        f"{seed_tag}_{args.valid_year}.npz"
     )
     np.savez_compressed(
         output,
