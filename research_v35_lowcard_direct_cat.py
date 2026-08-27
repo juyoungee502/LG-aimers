@@ -195,7 +195,7 @@ def main():
         target=fold_target.astype(np.float32),
         base=base.astype(np.float32),
         prediction=prediction.astype(np.float32),
-        game_type=game_type,
+        game_type=np.asarray(game_type, dtype="<U1"),
         diagnostics_json=np.asarray(json.dumps(diagnostics)),
     )
     print(json.dumps(diagnostics, indent=2), flush=True)
