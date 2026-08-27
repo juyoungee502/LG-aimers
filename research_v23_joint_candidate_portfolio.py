@@ -15,16 +15,25 @@ import pandas as pd
 from research_inferred_pitch_priors import bss, reconstruct_labels
 from research_trackman_failure_prior import FAILURES, aligned_history, selection_delta
 from research_v23_combined_candidate import add_pitcher_season_exposure, logit, sigmoid
+from research_v23_context_deviation import deviation
 
 
 AXIS_NAMES = (
     "command_no_month", "command_full", "command_recent",
+    "global_logit_shift",
     "f_count", "f_hands", "f_runners",
     "fine_reverse", "fine_middle", "fine_wayoff",
+    "pressure_hand", "platoon_hand",
 )
-LOW = np.asarray([.45, -.20, -.20, -.20, -.20, -.40, -1.00, -.50, -1.00])
-HIGH = np.asarray([1.40, 1.40, 1.20,  .60,  .30,  .20,   .50, 1.00,  .50])
-DEFAULT = np.asarray([1.05, 1.00, .80, .30, 0., -.10, -.50, .25, -.50])
+LOW = np.asarray([
+    .45, -.20, -.20, -.020, -.20, -.20, -.40, -1.00, -.50, -1.00, 0., 0.,
+])
+HIGH = np.asarray([
+    1.40, 1.40, 1.20, .010, .60, .30, .20, .50, 1.00, .50, .50, .30,
+])
+DEFAULT = np.asarray([
+    1.05, 1.00, .80, -.006, .30, 0., -.10, -.50, .25, -.50, .20, .075,
+])
 RANDOM_CANDIDATES = 180_000
 RNG_SEED = 72301
 
@@ -73,23 +82,30 @@ def candidate_weights():
     # Concentrate half the search near independently robust settings while still
     # retaining a broad uniform exploration of interactions.
     local = DEFAULT + rng.normal(
-        scale=np.asarray([.18, .25, .25, .16, .10, .12, .20, .18, .20]),
+        scale=np.asarray([
+            .18, .25, .25, .005, .16, .10, .12, .20, .18, .20, .10, .06,
+        ]),
         size=(RANDOM_CANDIDATES, len(AXIS_NAMES)),
     )
     local = np.clip(local, LOW, HIGH)
+    no_fine = DEFAULT.copy()
+    no_fine[7:10] = 0.
+    no_context = DEFAULT.copy()
+    no_context[10:12] = 0.
+    command_f = DEFAULT.copy()
+    command_f[7:] = 0.
+    command_only = np.zeros(len(AXIS_NAMES))
+    command_only[:4] = DEFAULT[:4]
     ablations = np.vstack([
-        DEFAULT,
-        np.r_[DEFAULT[:6], np.zeros(3)],
-        np.r_[DEFAULT[:3], np.zeros(6)],
-        np.r_[DEFAULT[:3], DEFAULT[3:6], np.zeros(3)],
+        DEFAULT, no_fine, no_context, command_f, command_only,
         np.zeros(len(AXIS_NAMES)),
     ])
     return np.vstack([uniform, local, ablations])
 
 
 def exact_prediction(item, weights):
-    command = item["logit_axes"] @ weights[:3]
-    additive = item["additive_axes"] @ weights[3:]
+    command = item["logit_axes"] @ weights[:4]
+    additive = item["additive_axes"] @ weights[4:]
     return np.clip(sigmoid(logit(item["base"]) + command) + additive, .005, .995)
 
 
@@ -106,6 +122,22 @@ def main():
     root = Path(__file__).resolve().parent
     data = pd.read_csv(
         root / "data/train.csv", encoding="utf-8-sig", low_memory=False,
+    )
+    data["count_state"] = (
+        data["balls_before"].to_numpy(np.int16) * 3
+        + data["strikes_before"].to_numpy(np.int16)
+    )
+    balls = data["balls_before"].to_numpy(np.int16)
+    strikes = data["strikes_before"].to_numpy(np.int16)
+    data["pressure_state"] = np.where(
+        (balls == 3) & (strikes == 2), 2,
+        np.where((balls == 3) | (strikes == 2), 1, 0),
+    ).astype(np.int8)
+    data["season_relative_target"] = (
+        data["control_success"]
+        - data.groupby(["season", "game_type"], observed=True)[
+            "control_success"
+        ].transform("mean")
     )
     exposure = add_pitcher_season_exposure(data[[
         "season", "pitcher_id", "asof_pitcher_n",
@@ -141,6 +173,7 @@ def main():
             regular * no_month,
             regular * early * full,
             regular * early * recent,
+            np.ones(len(rows), dtype=float),
         ])
 
         source = history.loc[history["season"].lt(year)]
@@ -154,7 +187,23 @@ def main():
             fine_members.append(regular * (raw_signal - center))
             fine_centers.append(center)
         fine = np.column_stack(fine_members)
-        additive_axes = np.column_stack([futures[:, None] * resolution, fine])
+        source_all = data.loc[data["season"].lt(year)]
+        pressure = deviation(
+            source_all, rows,
+            ("pitcher_id", "pressure_state", "batter_hand"),
+            800., "season_relative_target",
+        )
+        source_recent_regular = data.loc[
+            data["season"].between(year - 3, year - 1)
+            & data["game_type"].eq("R")
+        ]
+        platoon = deviation(
+            source_recent_regular, rows, ("pitcher_id", "batter_hand"),
+            100., "control_success",
+        )
+        additive_axes = np.column_stack([
+            futures[:, None] * resolution, fine, pressure, platoon,
+        ])
         if len(rows) != len(target):
             raise ValueError(f"row alignment failed for {year}")
         years[year] = {
