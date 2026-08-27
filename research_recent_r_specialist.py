@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import warnings
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from pandas.errors import PerformanceWarning
 from catboost import CatBoostClassifier
 
 from feature_engineering import (
@@ -20,6 +22,7 @@ CAT_COLUMNS = [
     "pitcher_id", "batter_id", "pitcher_team_id", "batter_team_id",
     "pitcher_hand", "batter_hand", "count_state", "hand_matchup", "team_matchup",
 ]
+warnings.filterwarnings("ignore", category=PerformanceWarning)
 
 
 def logit(probability):
