@@ -169,6 +169,26 @@ def main():
     # so a high aggregate gain cannot hide a late-month reversal.
     source = regular_indices[2023]
     valid = regular_indices[2024]
+    individual_audits = []
+    for candidate_spec in candidates.values():
+        candidate_correction = direction(
+            candidate_spec, source, valid, numeric, categorical, target, base,
+        )
+        candidate_prediction = np.clip(
+            base[valid] + candidate_correction, .005, .995,
+        )
+        individual_audits.append({
+            "spec": candidate_spec,
+            "detail": detail(
+                target[valid], base[valid], candidate_prediction,
+                rows.iloc[valid].reset_index(drop=True),
+            ),
+        })
+    individual_audits.sort(
+        key=lambda item: (
+            min(item["detail"].values()), item["detail"]["all"],
+        ), reverse=True,
+    )
     full_correction = np.zeros(len(valid), dtype=float)
     prefix_audits = []
     for item in selected:
@@ -198,6 +218,7 @@ def main():
     )
     result = {
         "candidate_count": len(candidates), "selected": selected,
+        "individual_audits": individual_audits,
         "prefix_audits": prefix_audits,
         "transfer_gains": current_gains,
         "regular_2024_detail": regular_detail,
