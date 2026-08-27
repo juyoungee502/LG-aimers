@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import warnings
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import torch
+from pandas.errors import PerformanceWarning
 from rtdl_num_embeddings import LinearReLUEmbeddings
 from tabm import TabM
 from torch import nn
@@ -34,6 +36,7 @@ CAT_COLUMNS = (
     "base_out_state", "hand_matchup", "team_matchup", "game_type",
     "top_bottom",
 )
+warnings.filterwarnings("ignore", category=PerformanceWarning)
 
 
 def arguments():
