@@ -104,7 +104,7 @@ def main():
     specs = (
         ("last2_r_d4", (seasons >= args.valid_year - 2) & regular, 4),
         ("last2_r_d6", (seasons >= args.valid_year - 2) & regular, 6),
-        ("all_r_d5", regular, 5),
+        ("all_r_d5", regular.copy(), 5),
     )
     predictions = []
     for offset, (name, train, depth) in enumerate(specs):
