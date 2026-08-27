@@ -262,6 +262,8 @@ def main():
         "v24_command_full": [],
         "v24_command_recent": [],
         "v24_resolution": {},
+        "v38_failure": {},
+        "v38_direct": [],
     }
     for index in range(3):
         model = CatBoostClassifier()
@@ -330,6 +332,12 @@ def main():
                 models["v24_resolution"].setdefault(mode, []).append(
                     resolution_model,
                 )
+        if "v38_lowcard_ensemble" in bundle.get("model_names", []):
+            direct_model = CatBoostClassifier()
+            direct_model.load_model(os.path.join(
+                model_dir, f"catboost_v38_direct_{index}.cbm",
+            ))
+            models["v38_direct"].append(direct_model)
     if "failure_specialist" in bundle.get("model_names", []):
         for label in bundle["failure_specialist"]["labels"]:
             failure_model = CatBoostClassifier()
@@ -337,6 +345,13 @@ def main():
                 model_dir, f"catboost_failure_{label}.cbm"
             ))
             models["failure"][label] = failure_model
+    if "v38_lowcard_ensemble" in bundle.get("model_names", []):
+        for label in bundle["v38_lowcard_ensemble"]["labels"]:
+            failure_model = CatBoostClassifier()
+            failure_model.load_model(os.path.join(
+                model_dir, f"catboost_v38_failure_{label}.cbm",
+            ))
+            models["v38_failure"][label] = failure_model
     print("Model version:", bundle["version"])
     test = pd.read_csv(test_path, encoding="utf-8-sig")
     if ID_COL not in test.columns or test[ID_COL].duplicated().any():
@@ -426,6 +441,40 @@ def main():
             models["failure"][label].predict_proba(failure_features)[:, 1]
             for label in configuration["labels"]
         ])
+
+    v38_failure_probability = None
+    v38_direct_probability = None
+    if "v38_lowcard_ensemble" in bundle.get("model_names", []):
+        configuration = bundle["v38_lowcard_ensemble"]
+        drop_columns = [
+            column for column in ("pitcher_id", "batter_id", "team_matchup")
+            if column in features
+        ]
+        direct_features = features.drop(columns=drop_columns).copy()
+        context = apply_frozen_failure_context(
+            test, configuration["failure_context"],
+        )
+        failure_features = pd.concat([
+            direct_features.reset_index(drop=True), context.reset_index(drop=True),
+        ], axis=1)
+        for column in configuration["categorical_columns"]:
+            direct_features[column] = direct_features[column].fillna(-1).astype(np.int32)
+            failure_features[column] = failure_features[column].fillna(-1).astype(np.int32)
+        if list(direct_features.columns) != configuration["direct_feature_columns"]:
+            raise ValueError("v38 direct feature order differs from training")
+        if list(failure_features.columns) != configuration["failure_feature_columns"]:
+            raise ValueError("v38 failure feature order differs from training")
+        failure_matrix = np.column_stack([
+            models["v38_failure"][label].predict_proba(failure_features)[:, 1]
+            for label in configuration["labels"]
+        ])
+        v38_failure_probability = np.clip(
+            1. - failure_matrix.sum(axis=1), RATE_EPS, 1. - RATE_EPS,
+        )
+        v38_direct_probability = np.mean([
+            model.predict_proba(direct_features)[:, 1]
+            for model in models["v38_direct"]
+        ], axis=0)
 
     cat_prediction = np.mean(
         [model.predict_proba(features)[:, 1] for model in models["catboost"]], axis=0
@@ -627,6 +676,18 @@ def main():
                 )
         prediction += float(policy["pressure_hand"]) * apply_frozen_pressure(
             test, configuration["pressure"],
+        )
+    if "v38_lowcard_ensemble" in bundle.get("model_names", []):
+        configuration = bundle["v38_lowcard_ensemble"]
+        failure_weight = float(configuration["failure_weight"])
+        prediction = sigmoid(
+            (1. - failure_weight) * logit(prediction)
+            + failure_weight * logit(v38_failure_probability)
+        )
+        direct_weight = float(configuration["direct_weight"])
+        prediction = sigmoid(
+            (1. - direct_weight) * logit(prediction)
+            + direct_weight * logit(v38_direct_probability)
         )
     if "v26_pareto_portfolio" in bundle.get("model_names", []):
         prediction += apply_temporal_portfolio(
