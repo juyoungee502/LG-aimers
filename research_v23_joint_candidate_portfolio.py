@@ -29,7 +29,7 @@ LOW = np.asarray([
     .45, -.20, -.20, -.020, -.20, -.20, -.40, -1.00, -.50, -1.00, 0., 0.,
 ])
 HIGH = np.asarray([
-    1.40, 1.40, 1.20, .010, .60, .30, .20, .50, 1.00, .50, .50, .30,
+    1.80, 1.40, 1.50, .010, .90, .30, .20, .50, 1.00, .50, .60, .30,
 ])
 DEFAULT = np.asarray([
     1.05, 1.00, .80, -.006, .30, 0., -.10, -.50, .25, -.50, .20, .075,
@@ -96,6 +96,17 @@ def candidate_weights():
     )
     constrained_no_fine = np.clip(constrained_no_fine, LOW, HIGH)
     constrained_no_fine[:, 7:10] = 0.
+    constrained_uniform = rng.uniform(
+        np.asarray([
+            .80, -.10, .20, -.012, .10, -.30, -.40,
+            0., 0., 0., .10, 0.,
+        ]),
+        np.asarray([
+            1.80, 1.20, 1.50, .004, .90, .15, .10,
+            0., 0., 0., .60, .10,
+        ]),
+        size=(RANDOM_CANDIDATES, len(AXIS_NAMES)),
+    )
     no_fine = DEFAULT.copy()
     no_fine[7:10] = 0.
     no_context = DEFAULT.copy()
@@ -112,7 +123,9 @@ def candidate_weights():
         DEFAULT, no_fine, no_context, command_f, command_only,
         np.zeros(len(AXIS_NAMES)),
     ])
-    weights = np.vstack([uniform, local, constrained_no_fine, ablations])
+    weights = np.vstack([
+        uniform, local, constrained_no_fine, constrained_uniform, ablations,
+    ])
     named_indices = {
         name: len(weights) - len(ablations) + index
         for index, name in enumerate(names)
