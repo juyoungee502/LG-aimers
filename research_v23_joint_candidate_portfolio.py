@@ -88,6 +88,14 @@ def candidate_weights():
         size=(RANDOM_CANDIDATES, len(AXIS_NAMES)),
     )
     local = np.clip(local, LOW, HIGH)
+    constrained_no_fine = DEFAULT + rng.normal(
+        scale=np.asarray([
+            .22, .30, .30, .006, .18, .12, .14, 0., 0., 0., .12, .07,
+        ]),
+        size=(RANDOM_CANDIDATES, len(AXIS_NAMES)),
+    )
+    constrained_no_fine = np.clip(constrained_no_fine, LOW, HIGH)
+    constrained_no_fine[:, 7:10] = 0.
     no_fine = DEFAULT.copy()
     no_fine[7:10] = 0.
     no_context = DEFAULT.copy()
@@ -96,11 +104,20 @@ def candidate_weights():
     command_f[7:] = 0.
     command_only = np.zeros(len(AXIS_NAMES))
     command_only[:4] = DEFAULT[:4]
+    names = (
+        "default", "no_fine", "no_context", "command_f", "command_only",
+        "zero",
+    )
     ablations = np.vstack([
         DEFAULT, no_fine, no_context, command_f, command_only,
         np.zeros(len(AXIS_NAMES)),
     ])
-    return np.vstack([uniform, local, ablations])
+    weights = np.vstack([uniform, local, constrained_no_fine, ablations])
+    named_indices = {
+        name: len(weights) - len(ablations) + index
+        for index, name in enumerate(names)
+    }
+    return weights, named_indices
 
 
 def exact_prediction(item, weights):
@@ -191,7 +208,7 @@ def main():
         pressure = deviation(
             source_all, rows,
             ("pitcher_id", "pressure_state", "batter_hand"),
-            800., "season_relative_target",
+            1200., "season_relative_target",
         )
         source_recent_regular = data.loc[
             data["season"].between(year - 3, year - 1)
@@ -230,7 +247,7 @@ def main():
             labels_for_geometry.append((str(year), name))
             geometries.append(((str(year), name), linear, quadratic))
 
-    weights = candidate_weights()
+    weights, named_indices = candidate_weights()
     gains = approximate(weights, geometries)
     label_index = {label: index for index, label in enumerate(labels_for_geometry)}
     year_columns = [label_index[(str(year), "all")] for year in (2023, 2024)]
@@ -255,9 +272,18 @@ def main():
     for values in objectives.values():
         count = min(300, len(values))
         selected.update(np.argpartition(values, -count)[-count:].tolist())
+        no_fine_indices = np.flatnonzero(
+            np.all(np.isclose(weights[:, 7:10], 0.), axis=1)
+        )
+        constrained_values = values[no_fine_indices]
+        constrained_count = min(300, len(constrained_values))
+        local_indices = np.argpartition(
+            constrained_values, -constrained_count,
+        )[-constrained_count:]
+        selected.update(no_fine_indices[local_indices].tolist())
     # Retain independently chosen policies even if a quadratic approximation
     # ranks them below interaction-tuned candidates.
-    selected.update(range(len(weights) - 5, len(weights)))
+    selected.update(named_indices.values())
     print(
         f"Exact scoring {len(selected)} finalists from {len(weights)} candidates",
         flush=True,
@@ -311,11 +337,30 @@ def main():
         name: sorted(reports, key=key, reverse=True)[:100]
         for name, key in ranking_functions.items()
     }
+    no_fine_reports = [
+        row for row in reports
+        if all(abs(row["weights"][name]) < 1e-12 for name in (
+            "fine_reverse", "fine_middle", "fine_wayoff",
+        ))
+    ]
+    no_fine_rankings = {
+        name: sorted(no_fine_reports, key=key, reverse=True)[:100]
+        for name, key in ranking_functions.items()
+    }
+    report_by_weights = {
+        tuple(row["weights"][name] for name in AXIS_NAMES): row
+        for row in reports
+    }
+    named_policies = {
+        name: report_by_weights[tuple(weights[index].tolist())]
+        for name, index in named_indices.items()
+    }
     output = root / "research/v23_joint_candidate_portfolio.json"
     output.write_text(json.dumps({
         "axis_names": AXIS_NAMES, "fine_configuration": {
             "outcome_k": 20., "selection_k": 600., "centers": centers,
-        }, "rankings": rankings,
+        }, "rankings": rankings, "no_fine_rankings": no_fine_rankings,
+        "named_policies": named_policies,
     }, indent=2), encoding="utf-8")
     print(json.dumps({name: rows[:12] for name, rows in rankings.items()}, indent=2))
     print(f"Saved {output}")
