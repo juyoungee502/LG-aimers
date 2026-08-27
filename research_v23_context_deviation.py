@@ -19,6 +19,7 @@ from research_inferred_pitch_priors import bss
 CONTEXTS = {
     "hand": ("pitcher_id", "batter_hand"),
     "count": ("pitcher_id", "count_state"),
+    "pressure_hand": ("pitcher_id", "pressure_state", "batter_hand"),
 }
 WINDOWS = (None, 1, 2, 3)
 SHRINKS = (100., 300., 800.)
@@ -87,6 +88,12 @@ def main():
         data["balls_before"].to_numpy(np.int16) * 3
         + data["strikes_before"].to_numpy(np.int16)
     )
+    balls = data["balls_before"].to_numpy(np.int16)
+    strikes = data["strikes_before"].to_numpy(np.int16)
+    data["pressure_state"] = np.where(
+        (balls == 3) & (strikes == 2), 2,
+        np.where((balls == 3) | (strikes == 2), 1, 0),
+    ).astype(np.int8)
     # A season-relative label is tested separately; it removes league-wide drift
     # before estimating within-pitcher context deviations.
     data["season_relative_target"] = (
