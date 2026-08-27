@@ -148,7 +148,14 @@ def frontier(regime, rows, numeric, categorical, context, y, base, year):
     reports = []
     for tier, constraints in constraint_tiers(all_curves).items():
         for cap in ((2.5, 4., 6.) if regime == "R" else (3., 4., 6.)):
-            result = optimize_gain(constraints, objective_curve, cap, [seed])
+            try:
+                result = optimize_gain(constraints, objective_curve, cap, [seed])
+            except RuntimeError as error:
+                reports.append({
+                    "tier": tier, "cap": cap, "rounding": None,
+                    "error": str(error), "gain_2024": -1e9,
+                })
+                continue
             for rounding in (None, .05):
                 weights = result.x.copy()
                 if rounding is not None:
@@ -237,7 +244,17 @@ def main():
             regime, rows, numeric, categorical, context, y, base, year,
         )
         print(json.dumps({
-            "regime": regime, "top": output[regime][:20],
+            "regime": regime, "top": [
+                {
+                    key: item.get(key) for key in (
+                        "tier", "cap", "rounding", "gain_2024",
+                        "min_all_transfer", "min_transfer_half",
+                        "min_transfer_quarter", "min_strict", "weight_sum",
+                        "error",
+                    )
+                }
+                for item in output[regime][:20]
+            ],
         }, indent=2), flush=True)
     path = ROOT / "research/v26_constraint_frontier.json"
     path.write_text(json.dumps(output, indent=2), encoding="utf-8")
