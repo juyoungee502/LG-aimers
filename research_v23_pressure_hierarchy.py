@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 
 from research_inferred_pitch_priors import bss
-from research_v23_context_deviation import masks
+from research_v23_context_deviation import curve, masks
 
 
 WINDOWS = (None, 1, 2, 3, 4)
@@ -124,42 +124,54 @@ def main():
             )
         print(f"Prepared hierarchical pressure deviations for {year}", flush=True)
 
-    reports = []
+    approximate = []
     for key in configs:
-        for gate_name, weight in itertools.product(("all", "regular"), WEIGHTS):
-            gains = {}
+        for gate_name in ("all", "regular"):
+            curves = {}
             for year, item in folds.items():
                 signal = (
                     item["masks"][gate_name].astype(float)
                     * signals[(year, key)]
                 )
-                gains[str(year)] = report(
-                    item["target"], item["base"], signal, float(weight),
-                    item["masks"],
-                )
-            core = [
-                value for year_gains in gains.values()
-                for name, value in year_gains.items()
-                if name in (
-                    "all", "first_half", "second_half", "months_3_5",
-                    "months_6_7", "months_8_11", "regular", "futures",
-                )
-            ]
-            temporal = [
-                value for year_gains in gains.values()
-                for name, value in year_gains.items()
-                if name not in ("all", "regular", "futures")
-            ]
-            reports.append({
-                "window": key[0], "source_game_type": key[1],
-                "value": key[2], "parent": key[3], "shrink": key[4],
-                "gate": gate_name, "weight": float(weight), "gains": gains,
-                "min_core": min(core), "min_temporal": min(temporal),
-                "min_year": min(gains["2023"]["all"], gains["2024"]["all"]),
-                "mean_year": float(np.mean([
-                    gains["2023"]["all"], gains["2024"]["all"],
-                ])),
-            })
+                curves[str(year)] = {
+                    name: curve(
+                        item["target"], item["base"], signal, active,
+                    )
+                    for name, active in item["masks"].items() if active.any()
+                }
+            for weight in WEIGHTS:
+                gains = {
+                    year: {
+                        name: linear * weight - quadratic * weight**2
+                        for name, (linear, quadratic) in year_curves.items()
+                    }
+                    for year, year_curves in curves.items()
+                }
+                core = [
+                    value for year_gains in gains.values()
+                    for name, value in year_gains.items()
+                    if name in (
+                        "all", "first_half", "second_half", "months_3_5",
+                        "months_6_7", "months_8_11", "regular", "futures",
+                    )
+                ]
+                temporal = [
+                    value for year_gains in gains.values()
+                    for name, value in year_gains.items()
+                    if name not in ("all", "regular", "futures")
+                ]
+                approximate.append({
+                    "window": key[0], "source_game_type": key[1],
+                    "value": key[2], "parent": key[3], "shrink": key[4],
+                    "gate": gate_name, "weight": float(weight), "gains": gains,
+                    "min_core": min(core), "min_temporal": min(temporal),
+                    "min_year": min(
+                        gains["2023"]["all"], gains["2024"]["all"],
+                    ),
+                    "mean_year": float(np.mean([
+                        gains["2023"]["all"], gains["2024"]["all"],
+                    ])),
+                })
 
     ranking_functions = {
         "maximin_core": lambda row: (
@@ -175,6 +187,56 @@ def main():
             row["mean_year"], row["min_year"], row["min_temporal"],
         ),
     }
+    chosen = {}
+    for ranking in ranking_functions.values():
+        for row in sorted(approximate, key=ranking, reverse=True)[:300]:
+            config = (
+                row["window"], row["source_game_type"], row["value"],
+                row["parent"], row["shrink"], row["gate"], row["weight"],
+            )
+            chosen[config] = row
+
+    reports = []
+    for row in chosen.values():
+        key = (
+            row["window"], row["source_game_type"], row["value"],
+            row["parent"], row["shrink"],
+        )
+        gains = {}
+        for year, item in folds.items():
+            signal = (
+                item["masks"][row["gate"]].astype(float)
+                * signals[(year, key)]
+            )
+            gains[str(year)] = report(
+                item["target"], item["base"], signal, row["weight"],
+                item["masks"],
+            )
+        core = [
+            value for year_gains in gains.values()
+            for name, value in year_gains.items()
+            if name in (
+                "all", "first_half", "second_half", "months_3_5",
+                "months_6_7", "months_8_11", "regular", "futures",
+            )
+        ]
+        temporal = [
+            value for year_gains in gains.values()
+            for name, value in year_gains.items()
+            if name not in ("all", "regular", "futures")
+        ]
+        reports.append({
+            **{name: row[name] for name in (
+                "window", "source_game_type", "value", "parent", "shrink",
+                "gate", "weight",
+            )},
+            "gains": gains, "min_core": min(core),
+            "min_temporal": min(temporal),
+            "min_year": min(gains["2023"]["all"], gains["2024"]["all"]),
+            "mean_year": float(np.mean([
+                gains["2023"]["all"], gains["2024"]["all"],
+            ])),
+        })
     rankings = {
         name: sorted(reports, key=ranking, reverse=True)[:100]
         for name, ranking in ranking_functions.items()
