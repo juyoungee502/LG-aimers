@@ -28,6 +28,7 @@ from v24_robust_candidate import (
     apply_frozen_command, apply_frozen_pressure, apply_resolution_center,
     early_pitcher_gate,
 )
+from v25_temporal_portfolio import apply_temporal_portfolio
 
 
 ID_COL = "row_id"
@@ -626,6 +627,10 @@ def main():
                 )
         prediction += float(policy["pressure_hand"]) * apply_frozen_pressure(
             test, configuration["pressure"],
+        )
+    if "v25_temporal_portfolio" in bundle.get("model_names", []):
+        prediction += apply_temporal_portfolio(
+            test, features, prediction, bundle["v25_temporal_portfolio"],
         )
     prediction = np.clip(prediction, *bundle["clip"])
     if len(prediction) != len(test) or not np.isfinite(prediction).all():
