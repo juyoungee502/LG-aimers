@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import warnings
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from catboost import CatBoostClassifier
+from pandas.errors import PerformanceWarning
 
 from failure_context import prior_season_context
 from feature_engineering import (
@@ -32,6 +34,7 @@ LOW_CARD_CATEGORIES = (
 CLASS_NAMES = (
     "success", "reverse_only", "middle_only", "reverse_middle", "wayoff",
 )
+warnings.filterwarnings("ignore", category=PerformanceWarning)
 
 
 def arguments():
