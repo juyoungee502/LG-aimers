@@ -30,6 +30,7 @@ from v24_robust_candidate import (
 )
 from v25_temporal_portfolio import apply_temporal_portfolio
 from recent_window_features import recent_window_features
+from tabm_numpy import predict_pair as predict_v67_pair
 
 
 ID_COL = "row_id"
@@ -494,6 +495,8 @@ def main():
     v54_joint_probability = None
     v60_direction = None
     v60_selected = None
+    v67_main_probability = None
+    v67_aux_probability = None
     if "v38_lowcard_ensemble" in bundle.get("model_names", []):
         configuration = bundle["v38_lowcard_ensemble"]
         drop_columns = [
@@ -608,6 +611,17 @@ def main():
                 for model in models["v60_fraction"]
             ], axis=0)
             v60_direction[v60_selected] = fraction_probability - base_probability
+    if "v67_multitask_tabm" in bundle.get("model_names", []):
+        if "direct_features" not in locals() or "failure_features" not in locals():
+            raise ValueError("v67 requires the v38 low-cardinality feature pipeline")
+        v67_trackman = apply_frozen_context(test, bundle["trackman_context"])
+        v67_features = pd.concat([
+            failure_features.reset_index(drop=True),
+            v67_trackman.reset_index(drop=True),
+        ], axis=1)
+        v67_main_probability, v67_aux_probability = predict_v67_pair(
+            model_dir, v67_features, bundle["v67_multitask_tabm"],
+        )
 
     cat_prediction = np.mean(
         [model.predict_proba(features)[:, 1] for model in models["catboost"]], axis=0
@@ -859,6 +873,18 @@ def main():
             float(configuration["correction_weight"])
             * v60_direction[v60_selected]
         )
+    if "v67_multitask_tabm" in bundle.get("model_names", []):
+        configuration = bundle["v67_multitask_tabm"]
+        direction = logit(v67_aux_probability) - logit(v67_main_probability)
+        exposure = direct_features["pitcher_season_n"].to_numpy(float)
+        regular = test["game_type"].astype(str).eq("R").to_numpy()
+        threshold = float(configuration["threshold"])
+        correction = np.zeros(len(test), dtype=np.float64)
+        selected_r = regular & (exposure > threshold)
+        selected_f = ~regular & (exposure <= threshold)
+        correction[selected_r] = float(configuration["r_weight"]) * direction[selected_r]
+        correction[selected_f] = float(configuration["f_weight"]) * direction[selected_f]
+        prediction = sigmoid(logit(prediction) + correction)
     if "v26_pareto_portfolio" in bundle.get("model_names", []):
         prediction += apply_temporal_portfolio(
             test, features, prediction, bundle["v26_pareto_portfolio"],

@@ -24,7 +24,10 @@ def main():
     args = p.parse_args(); root = Path(args.submit_dir)
     base_version = (
         "v54_roster_robust_command"
-        if args.expected_version == "v60_fraction_confidence"
+        if args.expected_version in (
+            "v60_fraction_confidence", "v67_tabm_conservative",
+            "v67_tabm_max_gain", "v67_tabm_distribution",
+        )
         else args.expected_version
     )
     model_names = list(REQUIRED_MODELS)
@@ -109,6 +112,8 @@ def main():
             f"catboost_v60_{label}_{index}.cbm"
             for label in ("base", "fraction") for index in range(6)
         )
+    if args.expected_version.startswith("v67_tabm_"):
+        model_names.extend(("v67_main.npz", "v67_aux.npz"))
     required = [
         root / "script.py", root / "requirements.txt", Path("feature_engineering.py"),
         Path("residual_effects.py"),
@@ -133,6 +138,8 @@ def main():
         required.append(Path("v25_temporal_portfolio.py"))
     if args.expected_version == "v60_fraction_confidence":
         required.append(Path("recent_window_features.py"))
+    if args.expected_version.startswith("v67_tabm_"):
+        required.extend((Path("recent_window_features.py"), Path("tabm_numpy.py")))
     missing = [str(path) for path in required if not path.is_file()]
     if missing: raise FileNotFoundError(f"Missing submission files: {missing}")
     metadata = json.loads((root / "model" / "metadata.json").read_text(encoding="utf-8"))
@@ -150,6 +157,7 @@ def main():
                 Path("v24_robust_candidate.py"),
                 Path("v25_temporal_portfolio.py"),
                 Path("recent_window_features.py"),
+                Path("tabm_numpy.py"),
             ) else path.relative_to(root).as_posix()
             archive.write(path, arcname)
     print(f"Created {output.resolve()} ({output.stat().st_size / 1024**2:.2f} MiB)")
