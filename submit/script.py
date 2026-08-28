@@ -264,6 +264,10 @@ def main():
         "v24_resolution": {},
         "v38_failure": {},
         "v38_direct": [],
+        "v54_command": None,
+        "v54_overlap": None,
+        "v54_recent": [],
+        "v54_joint": [],
     }
     for index in range(3):
         model = CatBoostClassifier()
@@ -352,6 +356,30 @@ def main():
                 model_dir, f"catboost_v38_failure_{label}.cbm",
             ))
             models["v38_failure"][label] = failure_model
+    if "v54_roster_robust_command" in bundle.get("model_names", []):
+        configuration = bundle["v54_roster_robust_command"]
+        command_model = CatBoostClassifier()
+        command_model.load_model(os.path.join(
+            model_dir, "catboost_v54_command.cbm",
+        ))
+        models["v54_command"] = command_model
+        overlap_model = CatBoostClassifier()
+        overlap_model.load_model(os.path.join(
+            model_dir, "catboost_v54_overlap.cbm",
+        ))
+        models["v54_overlap"] = overlap_model
+        for index in range(int(configuration["recent_model_count"])):
+            recent_model = CatBoostClassifier()
+            recent_model.load_model(os.path.join(
+                model_dir, f"catboost_v54_recent_{index}.cbm",
+            ))
+            models["v54_recent"].append(recent_model)
+        for index in range(int(configuration["joint_model_count"])):
+            joint_model = CatBoostClassifier()
+            joint_model.load_model(os.path.join(
+                model_dir, f"catboost_v54_joint_{index}.cbm",
+            ))
+            models["v54_joint"].append(joint_model)
     print("Model version:", bundle["version"])
     test = pd.read_csv(test_path, encoding="utf-8-sig")
     if ID_COL not in test.columns or test[ID_COL].duplicated().any():
@@ -444,6 +472,10 @@ def main():
 
     v38_failure_probability = None
     v38_direct_probability = None
+    v54_command_probability = None
+    v54_overlap_probability = None
+    v54_recent_probability = None
+    v54_joint_probability = None
     if "v38_lowcard_ensemble" in bundle.get("model_names", []):
         configuration = bundle["v38_lowcard_ensemble"]
         drop_columns = [
@@ -475,6 +507,56 @@ def main():
             model.predict_proba(direct_features)[:, 1]
             for model in models["v38_direct"]
         ], axis=0)
+    if "v54_roster_robust_command" in bundle.get("model_names", []):
+        if v38_failure_probability is None:
+            raise ValueError("v54 requires the v38 low-cardinality ensemble")
+        configuration = bundle["v54_roster_robust_command"]
+        if list(failure_features.columns) != configuration["feature_columns"]:
+            raise ValueError("v54 command feature order differs from training")
+        v54_futures = test["game_type"].astype(str).eq("F").to_numpy()
+        selected_failure_features = failure_features.loc[v54_futures]
+        v54_command_probability = np.full(len(test), .5, dtype=np.float64)
+        v54_overlap_probability = np.zeros(len(test), dtype=np.float64)
+        v54_recent_probability = np.full(len(test), .5, dtype=np.float64)
+        if v54_futures.any():
+            command_probability = models["v54_command"].predict_proba(
+                selected_failure_features,
+            )
+            command_classes = np.asarray(
+                models["v54_command"].classes_, dtype=int,
+            )
+            v54_command_probability[v54_futures] = command_probability[
+                :, command_classes == 0
+            ].sum(axis=1)
+            v54_overlap_probability[v54_futures] = models[
+                "v54_overlap"
+            ].predict_proba(selected_failure_features)[:, 1]
+            recent_probabilities = []
+            for model in models["v54_recent"]:
+                probability = model.predict_proba(selected_failure_features)
+                classes = np.asarray(model.classes_, dtype=int)
+                recent_probabilities.append(
+                    probability[:, classes == 0].sum(axis=1)
+                )
+            v54_recent_probability[v54_futures] = np.mean(
+                recent_probabilities, axis=0,
+            )
+
+        joint_features = failure_features.drop(columns=[
+            "pitcher_team_id", "batter_team_id",
+        ])
+        for column in configuration["joint_categorical_columns"]:
+            joint_features[column] = joint_features[column].fillna(-1).astype(np.int32)
+        if list(joint_features.columns) != configuration["joint_feature_columns"]:
+            raise ValueError("v54 joint feature order differs from training")
+        joint_probabilities = []
+        for model in models["v54_joint"]:
+            probability = model.predict_proba(joint_features)
+            classes = np.asarray(model.classes_, dtype=int)
+            joint_probabilities.append(
+                probability[:, classes % 5 == 0].sum(axis=1)
+            )
+        v54_joint_probability = np.mean(joint_probabilities, axis=0)
 
     cat_prediction = np.mean(
         [model.predict_proba(features)[:, 1] for model in models["catboost"]], axis=0
@@ -688,6 +770,37 @@ def main():
         prediction = sigmoid(
             (1. - direct_weight) * logit(prediction)
             + direct_weight * logit(v38_direct_probability)
+        )
+    if "v54_roster_robust_command" in bundle.get("model_names", []):
+        configuration = bundle["v54_roster_robust_command"]
+        v38_base = prediction.copy()
+        futures = test["game_type"].astype(str).eq("F").to_numpy()
+        if futures.any():
+            corrected = np.clip(
+                v38_failure_probability
+                + float(configuration["overlap_scale"])
+                * v54_overlap_probability,
+                RATE_EPS, 1. - RATE_EPS,
+            )
+            prediction[futures] = sigmoid(
+                logit(v38_base[futures])
+                + float(configuration["command_weight"]) * (
+                    logit(v54_command_probability[futures])
+                    - logit(v38_base[futures])
+                )
+                + float(configuration["overlap_weight"]) * (
+                    logit(corrected[futures]) - logit(v38_base[futures])
+                )
+                + float(configuration["recent_weight"]) * (
+                    logit(v54_recent_probability[futures])
+                    - logit(v38_base[futures])
+                )
+            )
+        prediction = sigmoid(
+            logit(prediction)
+            + float(configuration["joint_weight"]) * (
+                logit(v54_joint_probability) - logit(v38_base)
+            )
         )
     if "v26_pareto_portfolio" in bundle.get("model_names", []):
         prediction += apply_temporal_portfolio(

@@ -70,7 +70,7 @@ def main():
         ROOT / "research/v49_regime_multiclass_complexity_2024.npz"
     ) as archive:
         recent_b = archive["d6_i1000"].astype(float)
-    with np.load(ROOT / "research/v52_pitch_command_joint_s1_2024.npz") as archive:
+    with np.load(ROOT / "research/v52_pitch_command_joint_s3_2024.npz") as archive:
         joint_history = archive["history"].astype(float)
         joint_no_team = archive["history_no_team"].astype(float)
     if not all(len(value) == len(base) for value in (
@@ -103,7 +103,7 @@ def main():
         candidates[f"v46_recent_{weight:g}"] = value
     anchor = candidates["v46_recent_0.05"]
     for name, direction in joint_directions.items():
-        for weight in (.0125, .025):
+        for weight in (.0125, .01875, .025):
             candidates[f"anchor_{name}_{weight:g}"] = sigmoid(
                 logit(anchor) + weight * direction
             )
