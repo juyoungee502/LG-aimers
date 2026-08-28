@@ -186,6 +186,7 @@ def main():
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     if metadata.get("version") not in (
         "v38_lowcard_ensemble", "v54_roster_robust_command",
+        "v60_fraction_confidence",
     ):
         raise ValueError(
             f"Expected v38/v54 artifacts, got {metadata.get('version')}"
@@ -284,12 +285,16 @@ def main():
     report = audited_oof()
     names = [
         name for name in metadata.get("model_names", [])
-        if name not in ("v25_temporal_portfolio", "v26_pareto_portfolio")
+        if name not in (
+            "v25_temporal_portfolio", "v26_pareto_portfolio",
+            "v60_fraction_confidence",
+        )
     ]
     if "v54_roster_robust_command" not in names:
         names.append("v54_roster_robust_command")
     metadata["model_names"] = names
     metadata["version"] = "v54_roster_robust_command"
+    metadata.pop("v60_fraction_confidence", None)
     metadata["v54_roster_robust_command"] = {
         "categorical_columns": list(LOW_CARD_CATEGORIES),
         "feature_columns": list(features.columns),
