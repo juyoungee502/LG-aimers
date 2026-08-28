@@ -45,9 +45,10 @@ def evaluate(target, base, candidate, rows, segments):
     for team, indices in rows.groupby("pitcher_team_id", observed=True).groups.items():
         active = np.zeros(len(rows), dtype=bool)
         active[np.asarray(list(indices), dtype=int)] = True
-        team_gains[str(team)] = (
-            score(target, candidate, active) - score(target, base, active)
-        )
+        candidate_score = score(target, candidate, active)
+        base_score = score(target, base, active)
+        if candidate_score is not None and base_score is not None:
+            team_gains[str(team)] = candidate_score - base_score
     return {
         "gain_all": float(gains["all"]),
         "quarter_gains": {f"q{i}": float(gains[f"q{i}"]) for i in range(1, 5)},
