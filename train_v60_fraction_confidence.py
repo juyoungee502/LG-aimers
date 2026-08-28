@@ -40,6 +40,12 @@ def arguments():
     parser.add_argument("--task-type", choices=("CPU", "GPU"), default="GPU")
     parser.add_argument("--devices", default="0")
     parser.add_argument("--threads", type=int, default=-1)
+    parser.add_argument("--correction-weight", type=float, default=CORRECTION_WEIGHT)
+    parser.add_argument(
+        "--output-version",
+        choices=("v60_fraction_confidence", "v62_fraction_full"),
+        default="v60_fraction_confidence",
+    )
     return parser.parse_args()
 
 
@@ -61,7 +67,7 @@ def score(target, prediction, active):
     return float(bss(target[active], prediction[active]))
 
 
-def audited_oof(raw):
+def audited_oof(raw, correction_weight, output_version):
     with np.load(ROOT / "outputs/v54_oof_predictions.npz") as archive:
         v54_archive = {key: archive[key] for key in archive.files}
     year = 2024
@@ -93,7 +99,7 @@ def audited_oof(raw):
         np.mean(predictions, axis=0) - np.mean(references, axis=0)
     )
     candidate = np.clip(
-        base + CORRECTION_WEIGHT * direction * selected, .005, .995,
+        base + correction_weight * direction * selected, .005, .995,
     )
     segments = {
         **masks(len(rows)),
@@ -104,9 +110,10 @@ def audited_oof(raw):
     scores = {name: score(target, candidate, mask) for name, mask in segments.items()}
     gains = {name: scores[name] - baseline[name] for name in segments}
 
+    audit_key = f"weight_{correction_weight:.2f}"
     audit = json.loads(
         (ROOT / "research/v59_group_stability.json").read_text(encoding="utf-8")
-    )["summary"]["weight_0.75"]
+    )["summary"][audit_key]
     if (
         audit["minimum_all_gain"] < 2.9
         or audit["minimum_quarter_gain"] <= 0.
@@ -116,18 +123,21 @@ def audited_oof(raw):
         or min(gains[f"q{i}"] for i in range(1, 5)) <= 0.
     ):
         raise RuntimeError(
-            f"v60 promotion gate failed: independent_groups={audit}, gains={gains}"
+            f"fraction promotion gate failed: independent_groups={audit}, gains={gains}"
         )
+    short_version = "v62" if output_version == "v62_fraction_full" else "v60"
     upgraded = v54_archive["blended"].astype(np.float64).copy()
     upgraded[active] = candidate
     np.savez_compressed(
-        ROOT / "outputs/v60_oof_predictions.npz",
+        ROOT / "outputs" / f"{short_version}_oof_predictions.npz",
         **{key: value for key, value in v54_archive.items() if key != "blended"},
         blended=upgraded,
     )
     return {
         "baseline": baseline, "scores": scores, "gains": gains,
         "selected_rows": int(selected.sum()),
+        "correction_weight": correction_weight,
+        "output_version": output_version,
         "independent_group_audit": audit,
         "current_pitch_type_used": False,
         "forbidden_2025_trackman_used": False,
@@ -141,6 +151,7 @@ def main():
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     if metadata.get("version") not in (
         "v54_roster_robust_command", "v60_fraction_confidence",
+        "v62_fraction_full",
     ):
         raise ValueError(f"Expected v54/v60 artifacts, got {metadata.get('version')}")
 
@@ -187,18 +198,18 @@ def main():
         )
         model.save_model(str(model_dir / f"catboost_v60_fraction_{seed_index}.cbm"))
 
-    report = audited_oof(raw)
+    report = audited_oof(raw, args.correction_weight, args.output_version)
     names = list(metadata.get("model_names", []))
     if "v60_fraction_confidence" not in names:
         names.append("v60_fraction_confidence")
     metadata["model_names"] = names
-    metadata["version"] = "v60_fraction_confidence"
+    metadata["version"] = args.output_version
     metadata["v60_fraction_confidence"] = {
         "base_feature_columns": list(base_features.columns),
         "fraction_feature_columns": list(fraction_features.columns),
         "categorical_columns": list(LOW_CARD_CATEGORIES),
         "model_count": MODEL_COUNT,
-        "correction_weight": CORRECTION_WEIGHT,
+        "correction_weight": args.correction_weight,
         "recent1_min_reduced_n": RECENT1_MIN_N,
         "minimum_pitcher_season_exposure": MIN_SEASON_EXPOSURE,
         "training_game_type": "F",
@@ -207,12 +218,16 @@ def main():
         "current_pitch_type_used": False,
         "forbidden_2025_trackman_used": False,
     }
-    metadata.setdefault("training_info", {})["v60_validation"] = report
+    short_version = "v62" if args.output_version == "v62_fraction_full" else "v60"
+    metadata.setdefault("training_info", {})[f"{short_version}_validation"] = report
     metadata_path.write_text(
         json.dumps(metadata, ensure_ascii=False), encoding="utf-8",
     )
-    print(f"v60 validation: {json.dumps(report)}", flush=True)
-    print("Stored v60 paired models, metadata, and OOF diagnostics", flush=True)
+    print(f"{short_version} validation: {json.dumps(report)}", flush=True)
+    print(
+        f"Stored {short_version} paired models, metadata, and OOF diagnostics",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":
