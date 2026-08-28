@@ -104,20 +104,29 @@ def main():
     for year in (2023, 2024):
         frame = raw.loc[raw["season"].eq(year)].reset_index(drop=True)
         recent = recent_window_features(frame)
+        paired_members = next(
+            members for members in (3, 1)
+            if (
+                ROOT / "research"
+                / f"v58_recent_fraction_hl2_s{members}_{year}.npz"
+            ).exists() and (
+                ROOT / "research"
+                / f"v35_lowcard_direct_hl2_s{members}_{year}.npz"
+            ).exists()
+        )
         with np.load(
-            ROOT / "research" / f"v58_recent_fraction_hl2_s1_{year}.npz"
+            ROOT / "research"
+            / f"v58_recent_fraction_hl2_s{paired_members}_{year}.npz"
         ) as archive:
             target = archive["target"].astype(float)
             base = np.clip(archive["base"].astype(float), .005, .995)
             extra = np.clip(archive["prediction"].astype(float), .005, .995)
             game_type = archive["game_type"].astype(str)
-        paired_path = (
-            ROOT / "research" / f"v35_lowcard_direct_hl2_s1_{year}.npz"
+        reference_path = (
+            ROOT / "research"
+            / f"v35_lowcard_direct_hl2_s{paired_members}_{year}.npz"
         )
-        reference_path = paired_path if paired_path.exists() else (
-            ROOT / "research" / f"v35_lowcard_direct_hl2_s3_{year}.npz"
-        )
-        reference_members[str(year)] = 1 if paired_path.exists() else 3
+        reference_members[str(year)] = paired_members
         with np.load(reference_path) as archive:
             reference = np.clip(archive["prediction"].astype(float), .005, .995)
         if not (
