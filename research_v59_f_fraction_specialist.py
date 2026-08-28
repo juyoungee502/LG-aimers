@@ -143,6 +143,8 @@ def main():
         output, target=fold_target.astype(np.float32), base=v54.astype(np.float32),
         valid_f=valid_in_year, reference=reference.astype(np.float32),
         prediction=prediction.astype(np.float32),
+        reference_members=np.asarray(base_members, dtype=np.float32),
+        prediction_members=np.asarray(extra_members, dtype=np.float32),
         diagnostics_json=np.asarray(json.dumps(diagnostics)),
     )
     print(json.dumps(diagnostics, indent=2), flush=True)
