@@ -1,69 +1,82 @@
 # Model guide
 
-## Current candidate: v54
+## Current candidate: v60
 
-V54 is a conservative, roster-robust addition to the v38 ensemble. It predicts
-coherent command outcomes and a latent `pitch family × command outcome` target.
-The added models do not use raw pitcher or batter IDs; the joint model also
-removes both team IDs. This reduces dependence on the exact players and teams
-seen in earlier seasons.
+V60 keeps the confirmed v54 ensemble and adds a confidence correction for a
+small, well-supported subset of F-regime rows. The official recent-game success
+and middle rates are rounded fractions with a shared pitch-count denominator.
+V60 reconstructs a conservative denominator from those fractions, then compares
+six paired F-only CatBoost models: each pair is identical except that one member
+sees the reconstructed recent-window confidence features. Only the averaged
+paired difference is used; neither standalone model replaces v54.
+
+The correction is applied only when the row is F-regime, the reconstructed
+one-game denominator is at least 30, and current-season pitcher exposure is over
+100 pitches. All other rows retain the v54 prediction.
 
 Exact chronological validation on 2024 rows:
 
-| Metric | v38 | v54 | Gain |
+| Metric | v54 | v60 | Gain |
 |---|---:|---:|---:|
-| Overall BSS | 1020.853 | 1023.917 | +3.064 |
+| Overall BSS | 1023.917 | 1027.212 | +3.296 |
 | R regime BSS | 1013.157 | 1013.157 | +0.000 |
-| F regime BSS | 753.228 | 779.259 | +26.032 |
-| First half | 1151.835 | 1155.485 | +3.651 |
-| Second half | 877.973 | 880.449 | +2.476 |
+| F regime BSS | 779.259 | 807.263 | +28.004 |
+| First half | 1155.485 | 1159.959 | +4.473 |
+| Second half | 880.449 | 882.567 | +2.118 |
 
-All four quarter gains are positive: `+4.937`, `+2.362`, `+3.446`, and
-`+1.508`. The improvement also remains positive for returning players, roster
-changes, unchanged teams, player/team changes, and low/high pitcher-exposure
-cohorts. The weakest of those roster slices is `+0.831` BSS. A pitcher-clustered
-bootstrap gives a 5th percentile gain of `+0.046` and a `95.3%` probability of
-positive improvement.
+All four quarter gains are positive: `+4.332`, `+4.615`, `+1.824`, and
+`+2.412`. Returning players, roster changes, unchanged teams, player/team
+changes, and high-exposure pitchers gain `+3.452`, `+2.983`, `+3.935`, `+2.524`,
+and `+3.763`, respectively. Low-exposure rows are deliberately unchanged.
 
-These checks reduce historical roster bias but cannot guarantee the 2025 public
-score. V54 scored **1113** on the public leaderboard, the best confirmed result
-so far, but the 1200-point target has not been reached.
+The six pairs were also split into two independent three-seed ensembles. At the
+frozen production weight, their gains were `+22.550/+3.146` on 2023/2024 and
+`+21.867/+2.958` on 2023/2024. Across both seed groups, the minimum quarter gain
+was `+0.403`, the minimum affected roster gain was `+8.426`, and the minimum
+pitcher-clustered bootstrap 5th percentile was `+0.823`.
+
+These checks reduce historical roster and seed bias but cannot guarantee the
+2025 public score. V54 scored **1113** on the public leaderboard and remains the
+best confirmed result; v60 has not been submitted. The 1200-point target has not
+yet been reached.
 
 ## GPU server: train, validate, test, and package
 
-V38 artifacts are built automatically when missing. Run this single command
+V54 artifacts and v59 audits are built automatically when missing. Run this single command
 sequence on the server:
 
 ```bash
 cd ~/바탕화면/LG-aimers
 git pull --ff-only origin experiment/junseo-catboost-gpu
 source .venv/bin/activate
-bash run_v54.sh
+bash run_v60.sh
 ```
 
 The runner performs chronological/roster validation, GPU training, submission
 packaging, and an isolated package smoke test. It creates:
 
-- `submission_v54.zip`: code-submission ZIP
-- `outputs/v54_oof_predictions.npz`: OOF diagnostics
-- `training_v54.log`: complete build log
-- `research/v53_roster_stability.json`: roster audit
-- `outputs/results_v54.zip`: all deliverables bundled together
+- `submission_v60.zip`: code-submission ZIP
+- `outputs/v60_oof_predictions.npz`: OOF diagnostics
+- `training_v60.log`: complete build log
+- `research/v59_group_stability.json`: independent-seed audit
+- `outputs/results_v60.zip`: all deliverables bundled together
 
 Copy the result bundle to the PC from PowerShell:
 
 ```powershell
-scp "JunseoPark@sia-com3:~/바탕화면/LG-aimers/outputs/results_v54.zip" "outputs/results_v54.zip"
+scp "JunseoPark@sia-com3:~/바탕화면/LG-aimers/outputs/results_v60.zip" "outputs/results_v60.zip"
 ```
 
-If v54 is eventually selected for submission, extract and submit
-`submission_v54.zip` from inside the result bundle.
+If v60 is selected for submission, extract and submit `submission_v60.zip` from
+inside the result bundle.
 
 ## Design and data constraints
 
 - Validation is chronological; a random split is not used for promotion.
-- Added v54 models exclude raw pitcher and batter IDs.
+- Added v54/v60 models exclude raw pitcher and batter IDs.
 - The joint roster-robust component also excludes raw team IDs.
+- V60 uses only official row-local recent-game rates and frozen training-history
+  exposure; it does not aggregate or inspect other evaluation rows.
 - Inference is row-independent and never aggregates evaluation rows.
 - Anonymous and Trackman IDs are linked only through allowed 2019-2024
   historical pitch-sequence alignment.
@@ -82,6 +95,7 @@ translations from local validation:
 | v23 | 989.538 | 1105 |
 | v26 | 1043.739 | 1079 |
 | v54 | 1023.917 | 1113 |
+| v60 | 1027.212 | not submitted |
 
 V26 demonstrates why a higher single-year local score is insufficient. It is
 excluded from the current candidate path because its local gain did not transfer
@@ -92,6 +106,12 @@ failure prior. Although its 2023/2024 yearly and quarterly gains were positive,
 it is also excluded: its 2024 gain over v54 was only `+0.811`, the cohort absent
 from the prior-season roster lost `-0.620`, and the pitcher-clustered bootstrap
 5th percentile was `-0.705`.
+
+V58 first tested reconstructed fraction confidence in a general direct model;
+its effect was too small and seed-sensitive for promotion. V59 isolated the same
+features inside F-only paired models. Two independent three-seed ensembles then
+reproduced the same positive 2023/2024 direction, leading to the gated six-pair
+v60 production correction.
 
 ## Older standalone pipeline
 
