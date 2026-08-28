@@ -125,11 +125,24 @@ def main():
     ) as archive:
         failure = archive["new_failure"].astype(float)
         fold_target = archive["target"].astype(float)
-    if args.valid_year != 2024:
-        raise ValueError("v38 baseline is currently available only for 2024")
-    with np.load(ROOT / "outputs/v38_oof_predictions.npz") as archive:
+    with np.load(ROOT / "outputs/v24_oof_predictions.npz") as archive:
         active = archive["season"] == args.valid_year
-        base = np.clip(archive["blended"][active].astype(float), .005, .995)
+        v24 = np.clip(archive["blended"][active].astype(float), .005, .995)
+    with np.load(
+        ROOT / f"research/v35_lowcard_direct_hl2_s3_{args.valid_year}.npz",
+        allow_pickle=True,
+    ) as archive:
+        direct = np.clip(archive["prediction"].astype(float), .005, .995)
+    first = sigmoid(.825 * logit(v24) + .175 * logit(failure))
+    base = sigmoid(.90 * logit(first) + .10 * logit(direct))
+    if args.valid_year == 2024:
+        with np.load(ROOT / "outputs/v38_oof_predictions.npz") as archive:
+            replay = np.clip(
+                archive["blended"][archive["season"] == 2024].astype(float),
+                .005, .995,
+            )
+        if not np.allclose(base, replay, atol=2e-7):
+            raise ValueError("reconstructed v38 does not match the frozen OOF")
     if not np.allclose(fold_target, target[valid]):
         raise ValueError("prediction rows do not align")
 
