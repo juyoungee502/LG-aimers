@@ -22,10 +22,9 @@ def main():
     p.add_argument("--output", default="submission_v17.zip")
     p.add_argument("--expected-version", default="v17_trackman_context")
     args = p.parse_args(); root = Path(args.submit_dir)
-    fraction_versions = ("v60_fraction_confidence", "v62_fraction_full")
     base_version = (
         "v54_roster_robust_command"
-        if args.expected_version in fraction_versions
+        if args.expected_version == "v60_fraction_confidence"
         else args.expected_version
     )
     model_names = list(REQUIRED_MODELS)
@@ -105,7 +104,7 @@ def main():
         model_names.extend(
             f"catboost_v54_joint_{index}.cbm" for index in range(3)
         )
-    if args.expected_version in fraction_versions:
+    if args.expected_version == "v60_fraction_confidence":
         model_names.extend(
             f"catboost_v60_{label}_{index}.cbm"
             for label in ("base", "fraction") for index in range(6)
@@ -132,7 +131,7 @@ def main():
         "v54_roster_robust_command",
     ):
         required.append(Path("v25_temporal_portfolio.py"))
-    if args.expected_version in fraction_versions:
+    if args.expected_version == "v60_fraction_confidence":
         required.append(Path("recent_window_features.py"))
     missing = [str(path) for path in required if not path.is_file()]
     if missing: raise FileNotFoundError(f"Missing submission files: {missing}")

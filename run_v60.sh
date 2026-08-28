@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-VERSION="${VERSION:-v60}"
-EXPECTED_VERSION="${EXPECTED_VERSION:-v60_fraction_confidence}"
-CORRECTION_WEIGHT="${CORRECTION_WEIGHT:-0.75}"
+VERSION="v60"
 LOG_FILE="training_${VERSION}.log"
 SUBMISSION_FILE="submission_${VERSION}.zip"
 RESULT_DIR="outputs"
 OOF_FILE="${RESULT_DIR}/${VERSION}_oof_predictions.npz"
-AUDIT_FILE="${AUDIT_FILE:-research/v59_group_stability.json}"
+AUDIT_FILE="research/v59_group_stability.json"
 RESULT_BUNDLE="${RESULT_DIR}/results_${VERSION}.zip"
 PYTHON_BIN="${PYTHON_BIN:-python}"
 
@@ -48,11 +46,9 @@ done
     echo "[$(date '+%F %T')] Auditing independent seed groups"
     "$PYTHON_BIN" research_v59_group_stability.py
     echo "[$(date '+%F %T')] Training fraction-confidence ensemble for ${VERSION}"
-    "$PYTHON_BIN" train_v60_fraction_confidence.py --task-type GPU --devices 0 \
-        --correction-weight "$CORRECTION_WEIGHT" \
-        --output-version "$EXPECTED_VERSION"
+    "$PYTHON_BIN" train_v60_fraction_confidence.py --task-type GPU --devices 0
     "$PYTHON_BIN" build_submission.py --output "$SUBMISSION_FILE" \
-        --expected-version "$EXPECTED_VERSION"
+        --expected-version v60_fraction_confidence
 
     smoke_dir="$(mktemp -d)"
     trap 'rm -rf -- "$smoke_dir"' EXIT
@@ -89,7 +85,7 @@ import pandas as pd
 result = pd.read_csv(sys.argv[1])
 if len(result) != 5 or not result["control_success"].between(0., 1.).all():
     raise RuntimeError("Packaged v60 smoke test failed")
-print(f"Packaged fraction-correction smoke test passed: rows={len(result)}")
+print(f"Packaged v60 smoke test passed: rows={len(result)}")
 PY
     echo "[$(date '+%F %T')] GPU training, validation, build, and smoke test completed"
 } 2>&1 | tee "$LOG_FILE"

@@ -1,8 +1,9 @@
 # Model guide
 
-## Current candidate: v60
+## Current confirmed candidate: v54
 
-V60 keeps the confirmed v54 ensemble and adds a confidence correction for a
+V54 remains the best confirmed submission at **1113** public BSS. V60 kept v54
+and added a confidence correction for a
 small, well-supported subset of F-regime rows. The official recent-game success
 and middle rates are rounded fractions with a shared pitch-count denominator.
 V60 reconstructs a conservative denominator from those fractions, then compares
@@ -35,40 +36,38 @@ frozen production weight, their gains were `+22.550/+3.146` on 2023/2024 and
 was `+0.403`, the minimum affected roster gain was `+8.426`, and the minimum
 pitcher-clustered bootstrap 5th percentile was `+0.823`.
 
-These checks reduce historical roster and seed bias but cannot guarantee the
-2025 public score. V54 scored **1113** on the public leaderboard and remains the
-best confirmed result; v60 has not been submitted. The 1200-point target has not
-yet been reached.
+Despite all local checks, v60 scored **1110** publicly: three points below v54.
+The correction therefore did not transfer to the hidden 2025 rows and is
+excluded from future candidates. V62 tested a stronger version of the same
+direction offline, but its production build was stopped as soon as the v60
+public result arrived. The 1200-point target has not yet been reached.
 
 ## GPU server: train, validate, test, and package
 
-V54 artifacts and v59 audits are built automatically when missing. Run this single command
-sequence on the server:
+Run the confirmed v54 build on the server:
 
 ```bash
 cd ~/바탕화면/LG-aimers
 git pull --ff-only origin experiment/junseo-catboost-gpu
 source .venv/bin/activate
-bash run_v60.sh
+bash run_v54.sh
 ```
 
 The runner performs chronological/roster validation, GPU training, submission
 packaging, and an isolated package smoke test. It creates:
 
-- `submission_v60.zip`: code-submission ZIP
-- `outputs/v60_oof_predictions.npz`: OOF diagnostics
-- `training_v60.log`: complete build log
-- `research/v59_group_stability.json`: independent-seed audit
-- `outputs/results_v60.zip`: all deliverables bundled together
+- `submission_v54.zip`: code-submission ZIP
+- `outputs/v54_oof_predictions.npz`: OOF diagnostics
+- `training_v54.log`: complete build log
+- `outputs/results_v54.zip`: all deliverables bundled together
 
 Copy the result bundle to the PC from PowerShell:
 
 ```powershell
-scp "JunseoPark@sia-com3:~/바탕화면/LG-aimers/outputs/results_v60.zip" "outputs/results_v60.zip"
+scp "JunseoPark@sia-com3:~/바탕화면/LG-aimers/outputs/results_v54.zip" "outputs/results_v54.zip"
 ```
 
-If v60 is selected for submission, extract and submit `submission_v60.zip` from
-inside the result bundle.
+Extract and submit `submission_v54.zip` from inside the result bundle.
 
 ## Design and data constraints
 
@@ -95,7 +94,7 @@ translations from local validation:
 | v23 | 989.538 | 1105 |
 | v26 | 1043.739 | 1079 |
 | v54 | 1023.917 | 1113 |
-| v60 | 1027.212 | not submitted |
+| v60 | 1027.212 | 1110 |
 
 V26 demonstrates why a higher single-year local score is insufficient. It is
 excluded from the current candidate path because its local gain did not transfer
@@ -111,7 +110,8 @@ V58 first tested reconstructed fraction confidence in a general direct model;
 its effect was too small and seed-sensitive for promotion. V59 isolated the same
 features inside F-only paired models. Two independent three-seed ensembles then
 reproduced the same positive 2023/2024 direction, leading to the gated six-pair
-v60 production correction.
+v60 production correction. Its public score then disproved the apparent local
+gain, so this entire correction family is retired.
 
 ## Older standalone pipeline
 
