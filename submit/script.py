@@ -29,8 +29,6 @@ from v24_robust_candidate import (
     early_pitcher_gate,
 )
 from v25_temporal_portfolio import apply_temporal_portfolio
-from recent_window_features import recent_window_features
-from tabm_numpy import predict_pair as predict_v67_pair
 
 
 ID_COL = "row_id"
@@ -270,8 +268,6 @@ def main():
         "v54_overlap": None,
         "v54_recent": [],
         "v54_joint": [],
-        "v60_base": [],
-        "v60_fraction": [],
     }
     for index in range(3):
         model = CatBoostClassifier()
@@ -384,19 +380,6 @@ def main():
                 model_dir, f"catboost_v54_joint_{index}.cbm",
             ))
             models["v54_joint"].append(joint_model)
-    if "v60_fraction_confidence" in bundle.get("model_names", []):
-        configuration = bundle["v60_fraction_confidence"]
-        for index in range(int(configuration["model_count"])):
-            base_model = CatBoostClassifier()
-            base_model.load_model(os.path.join(
-                model_dir, f"catboost_v60_base_{index}.cbm",
-            ))
-            models["v60_base"].append(base_model)
-            fraction_model = CatBoostClassifier()
-            fraction_model.load_model(os.path.join(
-                model_dir, f"catboost_v60_fraction_{index}.cbm",
-            ))
-            models["v60_fraction"].append(fraction_model)
     print("Model version:", bundle["version"])
     test = pd.read_csv(test_path, encoding="utf-8-sig")
     if ID_COL not in test.columns or test[ID_COL].duplicated().any():
@@ -493,10 +476,6 @@ def main():
     v54_overlap_probability = None
     v54_recent_probability = None
     v54_joint_probability = None
-    v60_direction = None
-    v60_selected = None
-    v67_main_probability = None
-    v67_aux_probability = None
     if "v38_lowcard_ensemble" in bundle.get("model_names", []):
         configuration = bundle["v38_lowcard_ensemble"]
         drop_columns = [
@@ -578,50 +557,6 @@ def main():
                 probability[:, classes % 5 == 0].sum(axis=1)
             )
         v54_joint_probability = np.mean(joint_probabilities, axis=0)
-    if "v60_fraction_confidence" in bundle.get("model_names", []):
-        if not models["v60_base"] or "direct_features" not in locals():
-            raise ValueError("v60 requires the v38 direct feature pipeline")
-        configuration = bundle["v60_fraction_confidence"]
-        recent_features = recent_window_features(test)
-        fraction_features = pd.concat([
-            direct_features.reset_index(drop=True),
-            recent_features.reset_index(drop=True),
-        ], axis=1)
-        if list(direct_features.columns) != configuration["base_feature_columns"]:
-            raise ValueError("v60 base feature order differs from training")
-        if list(fraction_features.columns) != configuration["fraction_feature_columns"]:
-            raise ValueError("v60 fraction feature order differs from training")
-        v60_selected = (
-            test["game_type"].astype(str).eq(
-                configuration.get("training_game_type", "F"),
-            ).to_numpy()
-            & (recent_features["recent1_reduced_n"].to_numpy(float)
-               >= float(configuration["recent1_min_reduced_n"]))
-            & (direct_features["pitcher_season_n"].to_numpy(float)
-               > float(configuration["minimum_pitcher_season_exposure"]))
-        )
-        v60_direction = np.zeros(len(test), dtype=np.float64)
-        if v60_selected.any():
-            base_probability = np.mean([
-                model.predict_proba(direct_features.loc[v60_selected])[:, 1]
-                for model in models["v60_base"]
-            ], axis=0)
-            fraction_probability = np.mean([
-                model.predict_proba(fraction_features.loc[v60_selected])[:, 1]
-                for model in models["v60_fraction"]
-            ], axis=0)
-            v60_direction[v60_selected] = fraction_probability - base_probability
-    if "v67_multitask_tabm" in bundle.get("model_names", []):
-        if "direct_features" not in locals() or "failure_features" not in locals():
-            raise ValueError("v67 requires the v38 low-cardinality feature pipeline")
-        v67_trackman = apply_frozen_context(test, bundle["trackman_context"])
-        v67_features = pd.concat([
-            failure_features.reset_index(drop=True),
-            v67_trackman.reset_index(drop=True),
-        ], axis=1)
-        v67_main_probability, v67_aux_probability = predict_v67_pair(
-            model_dir, v67_features, bundle["v67_multitask_tabm"],
-        )
 
     cat_prediction = np.mean(
         [model.predict_proba(features)[:, 1] for model in models["catboost"]], axis=0
@@ -867,24 +802,6 @@ def main():
                 logit(v54_joint_probability) - logit(v38_base)
             )
         )
-    if "v60_fraction_confidence" in bundle.get("model_names", []):
-        configuration = bundle["v60_fraction_confidence"]
-        prediction[v60_selected] += (
-            float(configuration["correction_weight"])
-            * v60_direction[v60_selected]
-        )
-    if "v67_multitask_tabm" in bundle.get("model_names", []):
-        configuration = bundle["v67_multitask_tabm"]
-        direction = logit(v67_aux_probability) - logit(v67_main_probability)
-        exposure = direct_features["pitcher_season_n"].to_numpy(float)
-        regular = test["game_type"].astype(str).eq("R").to_numpy()
-        threshold = float(configuration["threshold"])
-        correction = np.zeros(len(test), dtype=np.float64)
-        selected_r = regular & (exposure > threshold)
-        selected_f = ~regular & (exposure <= threshold)
-        correction[selected_r] = float(configuration["r_weight"]) * direction[selected_r]
-        correction[selected_f] = float(configuration["f_weight"]) * direction[selected_f]
-        prediction = sigmoid(logit(prediction) + correction)
     if "v26_pareto_portfolio" in bundle.get("model_names", []):
         prediction += apply_temporal_portfolio(
             test, features, prediction, bundle["v26_pareto_portfolio"],
