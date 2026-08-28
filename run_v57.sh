@@ -52,6 +52,10 @@ sample = pd.concat([
     data.loc[data["game_type"].eq("R")].head(3),
     data.loc[data["game_type"].eq("F")].head(2),
 ], ignore_index=True).drop(columns=["control_success"])
+# Simulate legal mid-2025 as-of counts so the exposure gate is active on the
+# R rows.  This exercises the new correction path rather than only its fallback.
+sample["season"] = 2025
+sample["asof_pitcher_n"] = sample["asof_pitcher_n"] + 1000
 sample.to_csv(sys.argv[2], index=False, encoding="utf-8")
 PY
     (cd "$smoke_dir" && "$OLDPWD/$PYTHON_BIN" script.py)
