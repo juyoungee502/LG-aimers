@@ -1,6 +1,33 @@
 # Model guide
 
-## Current candidate: v54
+## Current experimental candidate: v55
+
+V55 keeps every v54 model and changes only the strength of the already
+public-positive v54 correction. Regular-season (`R`) rows remain exactly v54.
+For `F` rows, the logit correction from v38 to v54 is multiplied by `1.125`.
+No new model, raw ID, test-row aggregation, or post-2024 Trackman data is used.
+
+Against v54 on chronological 2024 validation, v55 gains `+0.222` overall and
+`+1.883` in F. Its four quarter gains are `+0.456`, `+0.192`, `+0.171`, and
+`+0.067`; returning/changed player and team cohorts are all positive. This is a
+small experimental improvement, not a confirmed leaderboard gain: the
+pitcher-clustered bootstrap 5th percentile is `-0.121`.
+
+Run and package v55 on the GPU server:
+
+```bash
+cd ~/바탕화면/LG-aimers
+git pull
+bash run_v55.sh
+```
+
+Copy the combined result to the PC:
+
+```powershell
+scp "JunseoPark@sia-com3:~/바탕화면/LG-aimers/outputs/results_v55.zip" "outputs/results_v55.zip"
+```
+
+## Confirmed anchor: v54
 
 V54 is a conservative, roster-robust addition to the v38 ensemble. It predicts
 coherent command outcomes and a latent `pitch family × command outcome` target.
