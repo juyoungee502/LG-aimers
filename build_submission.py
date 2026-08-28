@@ -24,7 +24,9 @@ def main():
     args = p.parse_args(); root = Path(args.submit_dir)
     base_version = (
         "v54_roster_robust_command"
-        if args.expected_version == "v55_v54_regime_scaling"
+        if args.expected_version in (
+            "v55_v54_regime_scaling", "v56_v54_regime_scaling",
+        )
         else args.expected_version
     )
     model_names = list(REQUIRED_MODELS)

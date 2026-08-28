@@ -1,6 +1,29 @@
 # Model guide
 
-## Current experimental candidate: v55
+## Current experimental candidate: v56
+
+V55 scored approximately **1113.6** publicly, about `+0.5` over v54. This is
+evidence that the conservative F-regime scaling transferred to hidden 2025
+rows. V56 takes exactly one more equal-sized step: R remains unchanged and the
+v54 F correction scale moves from `1.125` to `1.25`.
+
+Against v55 on chronological 2024 validation, v56 gains `+0.186` overall and
+`+1.579` in F. All quarters and roster/team-change cohorts remain positive, but
+the minimum quarter gain is only `+0.031` and the pitcher-clustered bootstrap
+5th percentile is `-0.154`. V56 is therefore a measured leaderboard experiment,
+not a guaranteed improvement.
+
+```bash
+cd ~/바탕화면/LG-aimers
+git pull
+bash run_v56.sh
+```
+
+```powershell
+scp "JunseoPark@sia-com3:~/바탕화면/LG-aimers/outputs/results_v56.zip" "outputs/results_v56.zip"
+```
+
+## Confirmed public candidate: v55
 
 V55 keeps every v54 model and changes only the strength of the already
 public-positive v54 correction. Regular-season (`R`) rows remain exactly v54.

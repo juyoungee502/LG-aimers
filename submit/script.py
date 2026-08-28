@@ -802,10 +802,15 @@ def main():
                 logit(v54_joint_probability) - logit(v38_base)
             )
         )
-    if "v55_v54_regime_scaling" in bundle.get("model_names", []):
+    scaling_name = None
+    if "v56_v54_regime_scaling" in bundle.get("model_names", []):
+        scaling_name = "v56_v54_regime_scaling"
+    elif "v55_v54_regime_scaling" in bundle.get("model_names", []):
+        scaling_name = "v55_v54_regime_scaling"
+    if scaling_name is not None:
         if "v38_base" not in locals():
-            raise ValueError("v55 requires the v54 correction pipeline")
-        configuration = bundle["v55_v54_regime_scaling"]
+            raise ValueError("v55/v56 requires the v54 correction pipeline")
+        configuration = bundle[scaling_name]
         futures = test["game_type"].astype(str).eq("F").to_numpy()
         scale = np.full(len(test), float(configuration["r_scale"]), dtype=float)
         scale[futures] = float(configuration["f_scale"])
