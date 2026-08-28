@@ -35,6 +35,7 @@ def arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("--valid-year", type=int, required=True, choices=(2023, 2024))
     parser.add_argument("--n-seeds", type=int, default=3)
+    parser.add_argument("--seed-offset", type=int, default=0)
     parser.add_argument("--iterations", type=int, default=1400)
     parser.add_argument("--half-life", type=float, default=2.)
     parser.add_argument("--task-type", choices=("CPU", "GPU"), default="GPU")
@@ -100,14 +101,15 @@ def main():
     extra_members = []
     for seed_index in range(args.n_seeds):
         print(f"v59 paired seed={seed_index + 1}/{args.n_seeds}: base", flush=True)
-        model = CatBoostClassifier(**parameters(args, seed_index))
+        paired_seed = seed_index + args.seed_offset
+        model = CatBoostClassifier(**parameters(args, paired_seed))
         model.fit(
             base_features.loc[train], target[train], sample_weight=sample_weight,
             cat_features=list(LOW_CARD_CATEGORIES),
         )
         base_members.append(model.predict_proba(base_features.loc[valid])[:, 1])
         print(f"v59 paired seed={seed_index + 1}/{args.n_seeds}: fraction", flush=True)
-        model = CatBoostClassifier(**parameters(args, seed_index))
+        model = CatBoostClassifier(**parameters(args, paired_seed))
         model.fit(
             extra_features.loc[train], target[train], sample_weight=sample_weight,
             cat_features=list(LOW_CARD_CATEGORIES),
@@ -128,6 +130,7 @@ def main():
         raise ValueError("F validation rows do not align")
     diagnostics = {
         "valid_year": args.valid_year, "n_seeds": args.n_seeds,
+        "seed_offset": args.seed_offset,
         "reference_bss_F": float(bss(target[valid], reference)),
         "fraction_bss_F": float(bss(target[valid], prediction)),
         "standalone_gain_F": float(
@@ -138,7 +141,10 @@ def main():
         "current_pitch_type_used": False,
         "forbidden_2025_trackman_used": False,
     }
-    output = ROOT / "research" / f"v59_f_fraction_s{args.n_seeds}_{args.valid_year}.npz"
+    offset_tag = "" if args.seed_offset == 0 else f"_o{args.seed_offset}"
+    output = ROOT / "research" / (
+        f"v59_f_fraction_s{args.n_seeds}{offset_tag}_{args.valid_year}.npz"
+    )
     np.savez_compressed(
         output, target=fold_target.astype(np.float32), base=v54.astype(np.float32),
         valid_f=valid_in_year, reference=reference.astype(np.float32),
