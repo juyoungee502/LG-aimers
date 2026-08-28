@@ -1,59 +1,95 @@
 # Model guide
 
-## Current candidate: v26
+## Current candidate: v54
 
-V26 starts from the v24 command/resolution model and replaces the v25 residual
-policy with a higher-gain Pareto-robust temporal portfolio. Its R/F policies
-were selected under chronological, half-season, quarter, and monthly
-constraints rather than a single 2024 score. V25 remains available as a more
-conservative fallback; the two residual policies are never stacked.
+V54 is a conservative, roster-robust addition to the v38 ensemble. It predicts
+coherent command outcomes and a latent `pitch family × command outcome` target.
+The added models do not use raw pitcher or batter IDs; the joint model also
+removes both team IDs. This reduces dependence on the exact players and teams
+seen in earlier seasons.
 
-Exact forward validation against v24:
+Exact chronological validation on 2024 rows:
 
-| Metric | v24 | v26 | Gain |
+| Metric | v38 | v54 | Gain |
 |---|---:|---:|---:|
-| 2024 OOF BSS | 1007.70 | 1043.74 | +36.04 |
-| R regime BSS | - | - | +24.12 |
-| F regime BSS | - | - | +125.49 |
+| Overall BSS | 1020.853 | 1023.917 | +3.064 |
+| R regime BSS | 1013.157 | 1013.157 | +0.000 |
+| F regime BSS | 753.228 | 779.259 | +26.032 |
+| First half | 1151.835 | 1155.485 | +3.651 |
+| Second half | 877.973 | 880.449 | +2.476 |
 
-The weakest of all audited slices is still positive: +5.00 BSS for R and
-+10.83 BSS for F. Inference uses only the current evaluation row and tables
-frozen from 2024 training data. It uses no 2025 Trackman data, no leaderboard-
-derived calibration, and no aggregation across evaluation rows.
+All four quarter gains are positive: `+4.937`, `+2.362`, `+3.446`, and
+`+1.508`. The improvement also remains positive for returning players, roster
+changes, unchanged teams, player/team changes, and low/high pitcher-exposure
+cohorts. The weakest of those roster slices is `+0.831` BSS. A pitcher-clustered
+bootstrap gives a 5th percentile gain of `+0.046` and a `95.3%` probability of
+positive improvement.
 
-## GPU server: train, validate, and package
+These checks reduce historical roster bias but cannot guarantee the 2025 public
+score. V54 scored **1113** on the public leaderboard, the best confirmed result
+so far, but the 1200-point target has not been reached.
 
-The v24 artifacts must already exist. If `outputs/v24_oof_predictions.npz` is
-missing, the runner invokes `run_v24.sh` first. Otherwise v26 only freezes and
-validates its residual tables, so the v26 step itself does not require a GPU.
+## GPU server: train, validate, test, and package
 
-Run this one command sequence on the server:
+V38 artifacts are built automatically when missing. Run this single command
+sequence on the server:
 
 ```bash
 cd ~/바탕화면/LG-aimers
 git pull --ff-only origin experiment/junseo-catboost-gpu
 source .venv/bin/activate
-bash run_v26.sh
+bash run_v54.sh
 ```
 
-This creates:
+The runner performs chronological/roster validation, GPU training, submission
+packaging, and an isolated package smoke test. It creates:
 
-- `submission_v26.zip`: code-submission ZIP
-- `outputs/v26_oof_predictions.npz`: OOF diagnostics
-- `training_v26.log`: complete validation/build log
-- `outputs/results_v26.zip`: all three files bundled together
+- `submission_v54.zip`: code-submission ZIP
+- `outputs/v54_oof_predictions.npz`: OOF diagnostics
+- `training_v54.log`: complete build log
+- `research/v53_roster_stability.json`: roster audit
+- `outputs/results_v54.zip`: all deliverables bundled together
 
 Copy the result bundle to the PC from PowerShell:
 
 ```powershell
-scp "JunseoPark@sia-com3:~/바탕화면/LG-aimers/outputs/results_v26.zip" .
+scp "JunseoPark@sia-com3:~/바탕화면/LG-aimers/outputs/results_v54.zip" "outputs/results_v54.zip"
 ```
 
-Submit `submission_v26.zip` from inside the result bundle.
+If v54 is eventually selected for submission, extract and submit
+`submission_v54.zip` from inside the result bundle.
 
-## Base training
+## Design and data constraints
 
-For the older standalone pipeline:
+- Validation is chronological; a random split is not used for promotion.
+- Added v54 models exclude raw pitcher and batter IDs.
+- The joint roster-robust component also excludes raw team IDs.
+- Inference is row-independent and never aggregates evaluation rows.
+- Anonymous and Trackman IDs are linked only through allowed 2019-2024
+  historical pitch-sequence alignment.
+- No 2025 Trackman history is read, joined, trained on, or packaged.
+- Current pitch type is never an inference input. Historical pitch labels are
+  reconstructed from the next cumulative state only for training targets.
+
+## Public-score anchors
+
+Known public results should be treated as empirical anchors, not deterministic
+translations from local validation:
+
+| Version | Local chronological BSS | Public score |
+|---|---:|---:|
+| v17 | 934.687 | 1076 |
+| v23 | 989.538 | 1105 |
+| v26 | 1043.739 | 1079 |
+| v54 | 1023.917 | 1113 |
+
+V26 demonstrates why a higher single-year local score is insufficient. It is
+excluded from the current candidate path because its local gain did not transfer
+to the public set. V55 additionally tested player/team-free, season-balanced
+models and rejected them: their useful blend direction reversed between the
+2023 and 2024 forward folds.
+
+## Older standalone pipeline
 
 ```powershell
 pip install -r requirements.txt
@@ -62,44 +98,16 @@ python script.py
 powershell -ExecutionPolicy Bypass -File .\make_submission.ps1
 ```
 
-Use `--preset fast` only for a pipeline smoke test. On a single-GPU Linux
-server, CatBoost training can use:
+On a single-GPU Linux server, CatBoost training can use:
 
 ```bash
 python train.py --preset full --task-type GPU --devices 0
 ```
 
-CatBoost accepts device ranges such as `--devices 0:1` or `--devices 0-3` for
-multiple GPUs.
-
-## Design constraints
-
-- Validation is chronological because the target rate shifts materially across
-  seasons. The production residual source is the latest allowed season, 2024.
-- CatBoost handles the anonymous high-cardinality pitcher and batter IDs with
-  ordered categorical statistics.
-- Bayesian shrinkage stabilizes season and context rates with small counts.
-- State features cover count, handedness, runners, leverage, score, recent
-  trends, pitch mix, and season-vs-prior deviations.
-- Anonymous and Trackman IDs are linked only through historical 2019-2024 pitch
-  sequence alignment. No current evaluation pitch is joined to Trackman.
-- Every v26 lookup is frozen in `metadata.json`; test-row frequency, grouping,
-  rolling statistics, and target encoding over the test set are prohibited.
-
-## Validation artifacts
-
-`train_v26_pareto_portfolio.py` reproduces all four forward-transfer audits,
-checks the strict minimum-gain gates, freezes 2024 tables for deployment, and
-writes the complete report into `submit/model/metadata.json`. It fails before
-packaging if R falls below +4.9 or F below +10.0 on any audited slice.
-
-Earlier checkpoints remain useful references: v17 scored 1076 and v23 scored
-1105 on the public leaderboard. V24 was not submitted when v25 was developed.
-
 ## Research basis
 
-- Prokhorenkova et al., *CatBoost: unbiased boosting with categorical features*,
-  NeurIPS 2018:
+- Prokhorenkova et al., *CatBoost: unbiased boosting with categorical
+  features*, NeurIPS 2018:
   https://proceedings.neurips.cc/paper_files/paper/2018/hash/14491b756b3a51daac41c24863285549-Abstract.html
 - Sidle and Tran, *Using multi-class classification methods to predict baseball
   pitch types*, Journal of Sports Analytics 2018. Count-dependent pitching
