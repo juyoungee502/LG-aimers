@@ -38,6 +38,7 @@ warnings.filterwarnings("ignore", category=PerformanceWarning)
 def arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("--iterations", type=int, default=1000)
+    parser.add_argument("--n-seeds", type=int, default=1)
     parser.add_argument("--task-type", choices=("CPU", "GPU"), default="GPU")
     parser.add_argument("--devices", default="0")
     parser.add_argument("--threads", type=int, default=-1)
@@ -117,23 +118,36 @@ def main():
     }), flush=True)
 
     predictions = {}
-    direct = CatBoostClassifier(**parameters(args, 0))
-    direct.fit(
-        features.loc[train], target[train],
-        cat_features=list(LOW_CARD_CATEGORIES),
-    )
-    predictions["direct"] = direct.predict_proba(features.loc[valid])[:, 1]
+    direct_predictions = []
+    multiclass_predictions = []
+    for seed_index in range(args.n_seeds):
+        direct = CatBoostClassifier(**parameters(args, 101 * seed_index))
+        direct.fit(
+            features.loc[train], target[train],
+            cat_features=list(LOW_CARD_CATEGORIES),
+        )
+        direct_predictions.append(
+            direct.predict_proba(features.loc[valid])[:, 1]
+        )
 
-    multiclass = CatBoostClassifier(**parameters(args, 1, multiclass=True))
-    multiclass.fit(
-        features.loc[train], outcome[train],
-        cat_features=list(LOW_CARD_CATEGORIES),
-    )
-    probabilities = multiclass.predict_proba(features.loc[valid])
-    success_position = int(np.flatnonzero(
-        np.asarray(multiclass.classes_, dtype=int) == 0
-    )[0])
-    predictions["multiclass"] = probabilities[:, success_position]
+        multiclass = CatBoostClassifier(**parameters(
+            args, 1 + 101 * seed_index, multiclass=True,
+        ))
+        multiclass.fit(
+            features.loc[train], outcome[train],
+            cat_features=list(LOW_CARD_CATEGORIES),
+        )
+        probabilities = multiclass.predict_proba(features.loc[valid])
+        success_position = int(np.flatnonzero(
+            np.asarray(multiclass.classes_, dtype=int) == 0
+        )[0])
+        multiclass_predictions.append(probabilities[:, success_position])
+        print(
+            f"completed direct/multiclass seed={seed_index + 1}/{args.n_seeds}",
+            flush=True,
+        )
+    predictions["direct"] = np.mean(direct_predictions, axis=0)
+    predictions["multiclass"] = np.mean(multiclass_predictions, axis=0)
 
     components = {}
     for offset, (name, label) in enumerate((
@@ -247,7 +261,8 @@ def main():
             combinations, key=lambda row: row["scores"]["all"], reverse=True,
         )[:60],
     }
-    output = ROOT / "research/v48_regime_command_2024.npz"
+    seed_tag = "" if args.n_seeds == 1 else f"_s{args.n_seeds}"
+    output = ROOT / f"research/v48_regime_command{seed_tag}_2024.npz"
     np.savez_compressed(
         output, target=fold_target.astype(np.float32),
         game_type=np.asarray(game_type, dtype="<U1"),
