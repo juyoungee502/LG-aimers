@@ -1,6 +1,45 @@
 # Model guide
 
-## Current experimental candidate: v56
+## Current experimental candidate: v57
+
+V56 scored **1113.86** publicly. V57 preserves the complete v56 F prediction
+and adds one conservative residual lookup only to regular-season (`R`) rows.
+The lookup uses eight bins of `pitcher_success_x_runners`, heavy shrinkage of
+`6400`, and weight `0.5`. It contains no raw player ID and is less dependent on
+the exact 2025 roster than player-specific tables. The correction is enabled
+only after `pitcher_season_n > 100`; early-season and cold-start rows remain
+exactly at the v56 prediction.
+
+On chronological 2023-to-2024 validation, v57 gains `+3.505` overall BSS and
+`+3.974` on R rows over v56. The four R-quarter gains are `+3.843`, `+4.748`,
+`+3.123`, and `+4.209`. A pitcher-clustered bootstrap has a `+1.005` 5th
+percentile and a `98.7%` probability of improvement. All roster/exposure
+cohorts are non-negative because low-exposure rows are left unchanged. Two of
+ten pitcher-team slices remain negative, so a public improvement is plausible
+but not guaranteed. Based on the small v55/v56 public-to-local transfer, the
+rough working range is **1118--1122**, centered near the requested 1120.
+
+V57 uses only frozen statistics learned from 2019--2024 training data. It does
+not use 2025 Trackman history, current-pitch outcome fields, or aggregation over
+test rows. The final validation, roster/team audit, and packaged inference smoke
+test are all run by the single server command below.
+
+```bash
+cd ~/바탕화면/LG-aimers
+git pull --ff-only origin experiment/junseo-catboost-gpu
+source .venv/bin/activate
+bash run_v57.sh
+```
+
+Copy the combined result to this PC:
+
+```powershell
+scp "JunseoPark@sia-com3:~/바탕화면/LG-aimers/outputs/results_v57.zip" "outputs/results_v57.zip"
+```
+
+Submit `submission_v57.zip` contained inside `outputs/results_v57.zip`.
+
+## Previous experimental candidate: v56
 
 V55 scored approximately **1113.6** publicly, about `+0.5` over v54. This is
 evidence that the conservative F-regime scaling transferred to hidden 2025

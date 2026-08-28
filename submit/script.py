@@ -28,7 +28,7 @@ from v24_robust_candidate import (
     apply_frozen_command, apply_frozen_pressure, apply_resolution_center,
     early_pitcher_gate,
 )
-from v25_temporal_portfolio import apply_temporal_portfolio
+from v25_temporal_portfolio import apply_regime, apply_temporal_portfolio
 
 
 ID_COL = "row_id"
@@ -817,6 +817,22 @@ def main():
         prediction = sigmoid(
             logit(v38_base) + scale * (logit(prediction) - logit(v38_base))
         )
+    if "v57_conservative_r_table" in bundle.get("model_names", []):
+        configuration = bundle["v57_conservative_r_table"]
+        regular = test["game_type"].astype(str).eq(
+            configuration.get("game_type_regular", "R"),
+        ).to_numpy()
+        if regular.any():
+            correction = apply_regime(
+                test.loc[regular], features.loc[regular], prediction[regular],
+                configuration["regular"],
+            )
+            gate_configuration = configuration["exposure_gate"]
+            exposure = features.loc[
+                regular, gate_configuration["feature"]
+            ].to_numpy(float)
+            gate = exposure > float(gate_configuration["minimum_exclusive"])
+            prediction[regular] += gate.astype(float) * correction
     if "v26_pareto_portfolio" in bundle.get("model_names", []):
         prediction += apply_temporal_portfolio(
             test, features, prediction, bundle["v26_pareto_portfolio"],

@@ -26,6 +26,7 @@ def main():
         "v54_roster_robust_command"
         if args.expected_version in (
             "v55_v54_regime_scaling", "v56_v54_regime_scaling",
+            "v57_conservative_r_table",
         )
         else args.expected_version
     )
