@@ -87,7 +87,11 @@ V26 demonstrates why a higher single-year local score is insufficient. It is
 excluded from the current candidate path because its local gain did not transfer
 to the public set. V55 additionally tested player/team-free, season-balanced
 models and rejected them: their useful blend direction reversed between the
-2023 and 2024 forward folds.
+2023 and 2024 forward folds. V56 tested an eight-type historical pitch-selection
+failure prior. Although its 2023/2024 yearly and quarterly gains were positive,
+it is also excluded: its 2024 gain over v54 was only `+0.811`, the cohort absent
+from the prior-season roster lost `-0.620`, and the pitcher-clustered bootstrap
+5th percentile was `-0.705`.
 
 ## Older standalone pipeline
 
