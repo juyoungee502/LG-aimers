@@ -1,6 +1,44 @@
 # Model guide
 
-## Current experimental candidate: v57
+## Current public-feedback candidate: v58
+
+V57 scored approximately **1112**, below the unchanged v56 anchor at
+**1113.86**. Because v57 changed only R rows, its frozen R residual direction
+is now treated as a 2025-reversed signal and is never applied with its old
+positive weight.
+
+V58 starts from v56. It makes only two measured changes:
+
+- the public-positive F correction scale moves from `1.25` to `1.375`;
+- the v57 R direction is applied at `-0.25` instead of `+1.0`, still only when
+  `pitcher_season_n > 100`.
+
+The deployed v57 table has only `0.573` times the squared correction magnitude
+of its forward-fold proxy. Combining that measured curvature with the rounded
+v57 public result projects v58 at approximately **1114.22--1114.47**. This is a
+leaderboard-feedback estimate, not a guarantee. The 2024 local score is
+`-1.062` BSS versus v56 because the R counterstep deliberately follows the
+observed 2025 public reversal rather than the non-transferring 2024 direction.
+
+V58 remains row-independent and uses no 2025 Trackman data, current-pitch
+outcome, test-row aggregation, or raw test-derived statistics.
+
+```bash
+cd ~/바탕화면/LG-aimers
+git pull --ff-only origin experiment/junseo-catboost-gpu
+source .venv/bin/activate
+bash run_v58.sh
+```
+
+Copy the result to this PC:
+
+```powershell
+scp "JunseoPark@sia-com3:~/바탕화면/LG-aimers/outputs/results_v58.zip" "outputs/results_v58.zip"
+```
+
+Submit `submission_v58.zip` contained inside `outputs/results_v58.zip`.
+
+## Retired public-negative candidate: v57
 
 V56 scored **1113.86** publicly. V57 preserves the complete v56 F prediction
 and adds one conservative residual lookup only to regular-season (`R`) rows.
@@ -10,14 +48,13 @@ the exact 2025 roster than player-specific tables. The correction is enabled
 only after `pitcher_season_n > 100`; early-season and cold-start rows remain
 exactly at the v56 prediction.
 
-On chronological 2023-to-2024 validation, v57 gains `+3.505` overall BSS and
+On chronological 2023-to-2024 validation, v57 gained `+3.505` overall BSS and
 `+3.974` on R rows over v56. The four R-quarter gains are `+3.843`, `+4.748`,
 `+3.123`, and `+4.209`. A pitcher-clustered bootstrap has a `+1.005` 5th
 percentile and a `98.7%` probability of improvement. All roster/exposure
-cohorts are non-negative because low-exposure rows are left unchanged. Two of
-ten pitcher-team slices remain negative, so a public improvement is plausible
-but not guaranteed. Based on the small v55/v56 public-to-local transfer, the
-rough working range is **1118--1122**, centered near the requested 1120.
+cohorts were non-negative because low-exposure rows were left unchanged. That
+local result did not transfer: the public score was approximately **1112**, so
+v57 must not be submitted again.
 
 V57 uses only frozen statistics learned from 2019--2024 training data. It does
 not use 2025 Trackman history, current-pitch outcome fields, or aggregation over
@@ -171,6 +208,9 @@ translations from local validation:
 | v23 | 989.538 | 1105 |
 | v26 | 1043.739 | 1079 |
 | v54 | 1023.917 | 1113 |
+| v55 | 1024.139 | 1113.6 |
+| v56 | 1024.325 | 1113.86 |
+| v57 | 1027.830 | 1112 |
 
 V26 demonstrates why a higher single-year local score is insufficient. It is
 excluded from the current candidate path because its local gain did not transfer

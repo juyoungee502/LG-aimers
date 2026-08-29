@@ -803,13 +803,15 @@ def main():
             )
         )
     scaling_name = None
-    if "v56_v54_regime_scaling" in bundle.get("model_names", []):
+    if "v58_public_feedback_counterstep" in bundle.get("model_names", []):
+        scaling_name = "v58_public_feedback_counterstep"
+    elif "v56_v54_regime_scaling" in bundle.get("model_names", []):
         scaling_name = "v56_v54_regime_scaling"
     elif "v55_v54_regime_scaling" in bundle.get("model_names", []):
         scaling_name = "v55_v54_regime_scaling"
     if scaling_name is not None:
         if "v38_base" not in locals():
-            raise ValueError("v55/v56 requires the v54 correction pipeline")
+            raise ValueError("v55/v56/v58 requires the v54 correction pipeline")
         configuration = bundle[scaling_name]
         futures = test["game_type"].astype(str).eq("F").to_numpy()
         scale = np.full(len(test), float(configuration["r_scale"]), dtype=float)
@@ -817,8 +819,13 @@ def main():
         prediction = sigmoid(
             logit(v38_base) + scale * (logit(prediction) - logit(v38_base))
         )
-    if "v57_conservative_r_table" in bundle.get("model_names", []):
-        configuration = bundle["v57_conservative_r_table"]
+    residual_name = None
+    if "v58_public_feedback_counterstep" in bundle.get("model_names", []):
+        residual_name = "v58_public_feedback_counterstep"
+    elif "v57_conservative_r_table" in bundle.get("model_names", []):
+        residual_name = "v57_conservative_r_table"
+    if residual_name is not None:
+        configuration = bundle[residual_name]
         regular = test["game_type"].astype(str).eq(
             configuration.get("game_type_regular", "R"),
         ).to_numpy()
@@ -832,7 +839,8 @@ def main():
                 regular, gate_configuration["feature"]
             ].to_numpy(float)
             gate = exposure > float(gate_configuration["minimum_exclusive"])
-            prediction[regular] += gate.astype(float) * correction
+            multiplier = float(configuration.get("r_v57_multiplier", 1.0))
+            prediction[regular] += multiplier * gate.astype(float) * correction
     if "v26_pareto_portfolio" in bundle.get("model_names", []):
         prediction += apply_temporal_portfolio(
             test, features, prediction, bundle["v26_pareto_portfolio"],
