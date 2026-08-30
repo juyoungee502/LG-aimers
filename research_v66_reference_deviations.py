@@ -57,6 +57,17 @@ def nested_deviation(
     child: str,
     shrinkage: float,
 ) -> np.ndarray:
+    table = nested_deviation_table(history, parent, child, shrinkage)
+    return rows[child].map(table).fillna(0.0).to_numpy(float)
+
+
+def nested_deviation_table(
+    history: pd.DataFrame,
+    parent: str,
+    child: str,
+    shrinkage: float,
+) -> pd.Series:
+    """Return a frozen child-minus-parent command table."""
     parent_mean = history.groupby(parent, sort=False, observed=True)[TARGET].mean()
     grouped = history.groupby(child, sort=False, observed=True).agg(
         child_sum=(TARGET, "sum"), child_n=(TARGET, "size"),
@@ -68,7 +79,7 @@ def nested_deviation(
         (child_rate - parent_rate)
         * grouped["child_n"] / (grouped["child_n"] + shrinkage)
     )
-    return rows[child].map(grouped["deviation"]).fillna(0.0).to_numpy(float)
+    return grouped["deviation"]
 
 
 def fold_corrections(

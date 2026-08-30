@@ -35,6 +35,7 @@ def main():
             "v63_train_trend_calibration",
             "v64_public_method_transfer",
             "v65_prediction_gap_meta",
+            "v66_reference_nested_deviations",
         )
         else args.expected_version
     )
@@ -117,6 +118,7 @@ def main():
         )
     if args.expected_version in (
         "v64_public_method_transfer", "v65_prediction_gap_meta",
+        "v66_reference_nested_deviations",
     ):
         model_names.extend(
             f"catboost_v64_f_residual_{index}.cbm" for index in range(3)
@@ -127,10 +129,13 @@ def main():
     ] + [root / "model" / n for n in model_names]
     if args.expected_version in (
         "v64_public_method_transfer", "v65_prediction_gap_meta",
+        "v66_reference_nested_deviations",
     ):
-        required.append(Path("v64_public_transfer.py"))
-    if args.expected_version == "v65_prediction_gap_meta":
-        required.append(Path("v65_prediction_gap.py"))
+        required.extend((
+            Path("v64_public_transfer.py"),
+            Path("v65_prediction_gap.py"),
+            Path("v66_reference_deviations.py"),
+        ))
     if base_version in ("v17_trackman_context", "v18_f_regime", "v19_failure_specialist", "v20_residual_portfolio", "v21_robust_residual_portfolio", "v22_component_residual_portfolio", "v23_probability_residual_portfolio", "v24_robust_command_resolution", "v25_strict_temporal_portfolio", "v26_pareto_temporal_portfolio", "v38_lowcard_ensemble", "v54_roster_robust_command"):
         required.append(Path("trackman_context.py"))
     if base_version in ("v19_failure_specialist", "v20_residual_portfolio", "v21_robust_residual_portfolio", "v22_component_residual_portfolio", "v23_probability_residual_portfolio", "v24_robust_command_resolution", "v25_strict_temporal_portfolio", "v26_pareto_temporal_portfolio", "v38_lowcard_ensemble", "v54_roster_robust_command"):
@@ -167,6 +172,7 @@ def main():
                 Path("v25_temporal_portfolio.py"),
                 Path("v64_public_transfer.py"),
                 Path("v65_prediction_gap.py"),
+                Path("v66_reference_deviations.py"),
             ) else path.relative_to(root).as_posix()
             archive.write(path, arcname)
     print(f"Created {output.resolve()} ({output.stat().st_size / 1024**2:.2f} MiB)")
