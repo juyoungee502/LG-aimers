@@ -28,6 +28,7 @@ def main():
             "v55_v54_regime_scaling", "v56_v54_regime_scaling",
             "v57_conservative_r_table",
             "v58_public_feedback_counterstep",
+            "v59_public_batter_exposure",
         )
         else args.expected_version
     )
