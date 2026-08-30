@@ -42,7 +42,9 @@ import pandas as pd
 data = pd.read_csv(sys.argv[1], encoding="utf-8-sig", low_memory=False)
 regular = data.loc[data["game_type"].eq("R")].tail(3)
 futures = data.loc[data["game_type"].eq("F")].tail(3)
-sample = pd.concat([regular, futures], ignore_index=True).drop(columns=["control_success"])
+cold = data.loc[data["asof_pitcher_n"].eq(0)].head(2)
+sample = pd.concat([cold, regular, futures], ignore_index=True)
+sample = sample.drop_duplicates("row_id").drop(columns=["control_success"])
 sample["season"] = 2025
 sample.to_csv(sys.argv[2], index=False, encoding="utf-8")
 PY
@@ -51,7 +53,7 @@ PY
 import sys
 import pandas as pd
 result = pd.read_csv(sys.argv[1])
-if len(result) != 6 or not result["control_success"].between(0., 1.).all():
+if len(result) < 6 or not result["control_success"].between(0., 1.).all():
     raise RuntimeError("Packaged v64 smoke test failed")
 print("Packaged v64 smoke test passed")
 PY

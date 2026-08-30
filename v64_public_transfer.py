@@ -30,6 +30,11 @@ def build_f_features(
 ) -> pd.DataFrame:
     """Build the F residual design without aggregating evaluation rows."""
     features = rows.drop(columns=list(F_DROP_COLUMNS), errors="ignore").copy()
+    # The official rate is missing only for zero-history cold starts.  Training
+    # represents that well-defined 0/0 state as zero, so inference must match it.
+    features["asof_pitcher_success_rate"] = features[
+        "asof_pitcher_success_rate"
+    ].fillna(0.0)
     prior = rows["pitcher_id"].map(prior_game_type).fillna("NEW")
     features["prior_game_type"] = prior
     features["league_transition"] = (
