@@ -32,6 +32,7 @@ from v25_temporal_portfolio import apply_regime, apply_temporal_portfolio
 from v64_public_transfer import (
     apply_dynamic_pitcher_state, build_f_features,
 )
+from v65_prediction_gap import prediction_gap_correction
 
 
 ID_COL = "row_id"
@@ -619,6 +620,24 @@ def main():
     brier_prediction = np.mean([
         model.predict(features) for model in models["brier_regressor"]
     ], axis=0)
+    lgb_a_prediction = models["lgb_a"].predict(features)
+    lgb_b_prediction = models["lgb_b"].predict(features)
+    history_prediction = history_expert(
+        features, bundle["history"]["global_prior"],
+    )
+    member_predictions = {
+        "lgb_a": lgb_a_prediction,
+        "lgb_b": lgb_b_prediction,
+        "catboost": cat_prediction,
+        "history_expert": history_prediction,
+        "count_expert": count_prediction,
+        "categorical_catboost": categorical_prediction,
+        "categorical_count_expert": categorical_count_prediction,
+        "brier_regressor": brier_prediction,
+        "weighted_catboost": weighted_cat_prediction,
+        "weighted_categorical_specialist": weighted_categorical_prediction,
+    }
+    stage_predictions = {}
     prediction = np.empty(len(features), dtype=np.float64)
     for label, gate_value in (("other", False), ("two_strike", True)):
         mask = two_strike_gate == gate_value
@@ -653,6 +672,7 @@ def main():
             pitch_prior.get("game_type", "R")
         ).to_numpy()] = 0.
         prediction += correction
+    stage_predictions["v16"] = np.clip(prediction.copy(), *bundle["clip"])
     if trackman_prediction is not None:
         configuration = bundle["trackman_context"]
         regular = test["game_type"].astype(str).eq(
@@ -665,6 +685,8 @@ def main():
             + weight * logit(trackman_prediction[regular])
         )
         prediction = sigmoid(combined_logit)
+    stage_predictions["v17"] = prediction.copy()
+    f_specialist_prediction = np.full(len(features), np.nan, dtype=np.float64)
     if models["f_regime"]:
         configuration = bundle["f_regime"]
         expected_f = configuration["model_feature_columns"]
@@ -678,6 +700,7 @@ def main():
                 model.predict_proba(features.loc[f_rows])[:, 1]
                 for model in models["f_regime"]
             ], axis=0)
+            f_specialist_prediction[f_rows] = f_prediction
             weight = float(configuration["blend_weight"])
             combined_logit = logit(prediction[f_rows])
             combined_logit = (
@@ -685,6 +708,7 @@ def main():
                 + weight * logit(f_prediction)
             )
             prediction[f_rows] = sigmoid(combined_logit)
+    stage_predictions["v18"] = prediction.copy()
     if failure_prediction is not None:
         configuration = bundle["failure_specialist"]
         regular = test["game_type"].astype(str).eq(
@@ -705,6 +729,7 @@ def main():
                 + weight_all * logit(p_all[regular])
                 + weight_middle * logit(p_middle[regular])
             )
+    stage_predictions["v19"] = prediction.copy()
     pre_portfolio_prediction = prediction.copy()
     if "residual_portfolio" in bundle:
         prediction += apply_frozen_portfolio(test, bundle["residual_portfolio"])
@@ -728,6 +753,7 @@ def main():
         prediction += apply_probability_portfolio(
             test, prediction, bundle["probability_residual_portfolio"],
         )
+    stage_predictions["v23"] = np.clip(prediction.copy(), *bundle["clip"])
     if "v24_robust_candidate" in bundle.get("model_names", []):
         configuration = bundle["v24_robust_candidate"]
         policy = configuration["policy"]
@@ -769,6 +795,7 @@ def main():
         prediction += float(policy["pressure_hand"]) * apply_frozen_pressure(
             test, configuration["pressure"],
         )
+    stage_predictions["v24"] = np.clip(prediction.copy(), *bundle["clip"])
     if "v38_lowcard_ensemble" in bundle.get("model_names", []):
         configuration = bundle["v38_lowcard_ensemble"]
         failure_weight = float(configuration["failure_weight"])
@@ -951,6 +978,16 @@ def main():
     if "v63_train_trend_calibration" in bundle.get("model_names", []):
         prediction += float(
             bundle["v63_train_trend_calibration"]["probability_offset"]
+        )
+    if "v65_prediction_gap_meta" in bundle.get("model_names", []):
+        configuration = bundle["v65_prediction_gap_meta"]
+        if trackman_prediction is None:
+            raise ValueError("v65 requires the Trackman context prediction")
+        v64_anchor = np.clip(prediction, *bundle["clip"])
+        prediction = v64_anchor + prediction_gap_correction(
+            test, v64_anchor, member_predictions, stage_predictions,
+            pre_specialist_prediction, trackman_prediction,
+            f_specialist_prediction, configuration,
         )
     prediction = np.clip(prediction, *bundle["clip"])
     if len(prediction) != len(test) or not np.isfinite(prediction).all():

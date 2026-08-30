@@ -1,5 +1,43 @@
 # Model guide
 
+## Conservative prediction-gap candidate: v65
+
+The public v64 result is **1135.1**. V65 leaves that complete model intact and
+fits a strongly regularized, zero-intercept Ridge direction to disagreements
+between v64 and this project's own historical OOF checkpoints and raw members.
+The correction scales are only `0.075` for R and `0.025` for F; the mean
+absolute change on the forward 2024 fold is `0.000687`.
+
+Only checkpoints that the current inference graph reproduces exactly are
+eligible: v16, v17, v18, v19, v23, and v24. Later archives with removed legacy
+stages are excluded, as are v62/v63. A specialist feature unavailable in the
+forward-training source is frozen inactive so it cannot appear only during the
+2025 production refit.
+
+Validation versus v64:
+
+| Fold | Total gain | First half | Second half | R | F |
+|---|---:|---:|---:|---:|---:|
+| 2023 H1 -> H2 | +4.155 | +5.564 | +2.745 | +3.888 | +6.871 |
+| 2023 -> 2024 | +2.042 | +1.704 | +2.380 | +2.190 | +0.938 |
+
+Pitcher-clustered 95% bootstrap intervals are `+1.82` to `+6.80` for 2023 H2
+and `+0.33` to `+3.86` for 2024. This is a stricter gate than recent versions,
+but hidden 2025 performance still cannot be guaranteed.
+
+```bash
+cd ~/바탕화면/LG-aimers
+git pull --ff-only origin experiment/junseo-catboost-gpu
+source .venv/bin/activate
+bash run_v65.sh
+```
+
+```powershell
+scp "JunseoPark@sia-com3:~/바탕화면/LG-aimers/outputs/results_v65.zip" "outputs/results_v65.zip"
+```
+
+Submit `submission_v65.zip` contained inside the result bundle.
+
 ## Train-only calibration candidate: v63
 
 V62 scored **1132.9**, only about `+0.2` over v61.  Its three structural
