@@ -1,5 +1,40 @@
 # Model guide
 
+## Public-transfer candidate: v62
+
+V61 scored **1132**, a `+7.1` gain over v60. Its observed transfer was about
+69% of the projected gain. Fixed-score curvature puts the v61 correction's
+vertex near `0.86x`, with only about `+0.2` left from scalar rescaling.
+
+V62 therefore adds three mostly independent row-local tables. A mirrored
+pitcher-hand-cell exposure direction reconstructs the public direction at
+`0.9998` correlation. A new OOF residual hand differential reconstructs its
+audited counterpart at `0.9724` correlation and is applied at half strength.
+Finally, the pitcher-by-batter-hand deviation shrinkage shape is the only new
+component with positive gains in both chronological directions (`+2.64` and
+`+3.25` at deployed scale). V61's two new components are also reduced to
+`0.86x`.
+
+After the measured HD/D0 overlap penalty, the central projection is
+**1140.06**, with a deliberately wide **1135--1144** range. The combined
+backward transfer remains negative, so this is an aggressive public-transfer
+candidate and not a score guarantee.
+
+```bash
+cd ~/바탕화면/LG-aimers
+git pull --ff-only origin experiment/junseo-catboost-gpu
+source .venv/bin/activate
+bash run_v62.sh
+```
+
+Copy the result to this PC:
+
+```powershell
+scp "JunseoPark@sia-com3:~/바탕화면/LG-aimers/outputs/results_v62.zip" "outputs/results_v62.zip"
+```
+
+Submit `submission_v62.zip` contained inside `outputs/results_v62.zip`.
+
 ## Public-transfer candidate: v61
 
 V60 scored **1124.9**, a `+4.4` gain over v59. Combining that result with the

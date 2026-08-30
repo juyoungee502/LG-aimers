@@ -875,6 +875,30 @@ def main():
                 .to_numpy(np.float64)
             )
             prediction += correction
+    if "v62_public_residual_frontier" in bundle.get("model_names", []):
+        configuration = bundle["v62_public_residual_frontier"]
+        scale_delta = float(configuration["v61_component_scale_delta"])
+        v61_configuration = bundle["v61_public_complete_shape"]
+        for component_name in ("batter_shape", "pitcher_log"):
+            component = v61_configuration[component_name]
+            correction = (
+                test[component["id_column"]]
+                .astype(str)
+                .map(dict(zip(component["keys"], component["deltas"])))
+                .fillna(float(component.get("unknown_player_delta", 0.0)))
+                .to_numpy(np.float64)
+            )
+            prediction += scale_delta * correction
+        for component_name in ("c4n_mirror", "residual_hand", "d0_shape"):
+            component = configuration[component_name]
+            columns = component["key_columns"]
+            keys = test[columns[0]].astype(str)
+            for column in columns[1:]:
+                keys = keys.str.cat(test[column].astype(str), sep="|")
+            correction = keys.map(
+                dict(zip(component["keys"], component["deltas"]))
+            ).fillna(float(component.get("unknown_key_delta", 0.0))).to_numpy(np.float64)
+            prediction += correction
     if "v26_pareto_portfolio" in bundle.get("model_names", []):
         prediction += apply_temporal_portfolio(
             test, features, prediction, bundle["v26_pareto_portfolio"],
