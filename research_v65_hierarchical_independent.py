@@ -150,6 +150,35 @@ def fit_fold(
     return np.mean(members, axis=0), audit
 
 
+def forward_affine_calibration(
+    source_prediction: np.ndarray,
+    source_target: np.ndarray,
+    source_season: np.ndarray,
+    target_year: int,
+    prediction: np.ndarray,
+) -> tuple[np.ndarray, dict[str, float]]:
+    weights = np.power(0.55, (target_year - 1) - source_season)
+    mean_prediction = float(np.average(source_prediction, weights=weights))
+    mean_target = float(np.average(source_target, weights=weights))
+    centered = source_prediction - mean_prediction
+    denominator = float(np.sum(weights * np.square(centered)))
+    slope = float(
+        np.sum(weights * centered * (source_target - mean_target))
+        / max(denominator, 1e-12)
+    )
+    slope = float(np.clip(slope, 0.25, 1.25))
+    calibrated = np.clip(
+        mean_target + slope * (prediction - mean_prediction), *CLIP,
+    )
+    return calibrated, {
+        "source_prediction_mean": mean_prediction,
+        "source_target_mean": mean_target,
+        "slope": slope,
+        "source_year_min": int(source_season.min()),
+        "source_year_max": int(source_season.max()),
+    }
+
+
 def gain(y: np.ndarray, base: np.ndarray, candidate: np.ndarray) -> float:
     return float(bss(y, candidate) - bss(y, base))
 
@@ -239,15 +268,32 @@ def main() -> None:
     if not np.array_equal(y, target_all[active]):
         raise ValueError("v64 OOF and official rows are not aligned")
 
-    alternatives: list[np.ndarray] = []
+    alternatives: dict[int, np.ndarray] = {}
     folds: dict[str, object] = {}
-    for year in (2023, 2024):
+    for year in (2022, 2023, 2024):
         prediction, audit = fit_fold(
             features, raw, target_all, seasons_all, year, args,
         )
-        alternatives.append(prediction)
+        alternatives[year] = prediction
         folds[str(year)] = audit
-    alternative = np.concatenate(alternatives)
+
+    calibrated: dict[int, np.ndarray] = {}
+    calibration: dict[str, object] = {}
+    for year in (2023, 2024):
+        source_years = [candidate for candidate in alternatives if candidate < year]
+        source_prediction = np.concatenate([alternatives[candidate] for candidate in source_years])
+        source_target = np.concatenate([
+            target_all[seasons_all == candidate] for candidate in source_years
+        ])
+        source_season = np.concatenate([
+            np.full(len(alternatives[candidate]), candidate, dtype=int)
+            for candidate in source_years
+        ])
+        calibrated[year], calibration[str(year)] = forward_affine_calibration(
+            source_prediction, source_target, source_season, year,
+            alternatives[year],
+        )
+    alternative = np.concatenate([calibrated[2023], calibrated[2024]])
     active_rows = raw.loc[active].reset_index(drop=True)
     regular = active_rows["game_type"].astype(str).eq("R").to_numpy()
 
@@ -307,6 +353,7 @@ def main() -> None:
             for year in (2023, 2024)
         },
         "fold_models": folds,
+        "forward_affine_calibration": calibration,
         "fixed_candidate": fixed,
         "scale_neighborhood": sensitivity,
         "bootstrap": bootstrap,
