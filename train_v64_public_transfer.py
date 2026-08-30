@@ -101,6 +101,12 @@ def main() -> None:
     raw = pd.read_csv(
         ROOT / "data/train.csv", encoding="utf-8-sig", low_memory=False,
     )
+    missing_pitcher_rate = raw["asof_pitcher_success_rate"].isna()
+    if not raw.loc[missing_pitcher_rate, "asof_pitcher_n"].eq(0).all():
+        raise ValueError("positive-count pitcher has a missing success rate")
+    raw["asof_pitcher_success_rate"] = raw[
+        "asof_pitcher_success_rate"
+    ].fillna(0.0)
     with np.load(ROOT / "outputs/v61_oof_predictions.npz") as archive:
         oof = {key: archive[key] for key in archive.files}
     seasons = oof["season"].astype(int)
@@ -163,6 +169,8 @@ def main() -> None:
                 ) if year == 2024 else None
             ),
         }
+    if not np.isfinite(corrected).all():
+        raise ValueError("v64 OOF correction contains non-finite values")
 
     # Production F residual: both strict OOF years, with the newer year weighted
     # twice as much.  The residual level is removed before training.
