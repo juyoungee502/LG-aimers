@@ -1,5 +1,41 @@
 # Model guide
 
+## Public-transfer candidate: v61
+
+V60 scored **1124.9**, a `+4.4` gain over v59. Combining that result with the
+fixed Brier curvature shows that the v60 hand-shape coordinate is already near
+its public optimum; rescaling it has only about `+0.06` point left.
+
+V61 instead completes two public-positive shape components that are missing
+from the current stack. The first changes the shrinkage shape of a batter OOF
+residual table from `k=20000` toward `k=2000`; its independently rebuilt row
+direction correlates `0.9064` with the audited direction that gained `+13.788`
+publicly. The second adds a residual-orthogonal pitcher log-exposure direction;
+its reconstruction correlation is `0.99956` and its reported public gain was
+`+0.691`.
+
+Both tables are rebuilt from this project's own strict OOF predictions and
+official 2023-2024 rows. Based on the linear-signal retention observed when v59
+and v60 transferred, their conservative strengths are `0.85` and `0.80`. The
+central public projection is **1135.18**, with a deliberately wide
+**1131--1138** range. Chronological validation is negative, so this is a
+leaderboard-transfer candidate rather than a guaranteed improvement.
+
+```bash
+cd ~/바탕화면/LG-aimers
+git pull --ff-only origin experiment/junseo-catboost-gpu
+source .venv/bin/activate
+bash run_v61.sh
+```
+
+Copy the result to this PC:
+
+```powershell
+scp "JunseoPark@sia-com3:~/바탕화면/LG-aimers/outputs/results_v61.zip" "outputs/results_v61.zip"
+```
+
+Submit `submission_v61.zip` contained inside `outputs/results_v61.zip`.
+
 ## Public-transfer candidate: v60
 
 V59 scored **1120.5**, a `+6.5` public gain over v58 and direct confirmation

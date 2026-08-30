@@ -30,6 +30,7 @@ def main():
             "v58_public_feedback_counterstep",
             "v59_public_batter_exposure",
             "v60_public_hand_shape",
+            "v61_public_complete_shape",
         )
         else args.expected_version
     )
