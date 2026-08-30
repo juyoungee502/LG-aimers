@@ -51,7 +51,7 @@ import pandas as pd
 data = pd.read_csv(sys.argv[1], encoding="utf-8-sig", low_memory=False)
 sample = data.loc[data["season"].eq(2024)].head(5).drop(columns=["control_success"])
 sample["season"] = 2025
-    sample.to_csv(sys.argv[2], index=False, encoding="utf-8")
+sample.to_csv(sys.argv[2], index=False, encoding="utf-8")
 PY
     mkdir -p "$baseline_dir/data" "$baseline_dir/output"
     cp "$smoke_dir/data/test.csv" "$baseline_dir/data/test.csv"
