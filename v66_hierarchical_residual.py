@@ -386,6 +386,62 @@ def snapshots_from_payload(payload: dict[str, dict[str, list]]) -> SeasonSnapsho
     )
 
 
+def build_adaptive_gate_features(
+    rows: pd.DataFrame,
+    channel_predictions: list[np.ndarray],
+    failure_risks: list[np.ndarray],
+    stacked_prediction: np.ndarray,
+) -> pd.DataFrame:
+    """Row-local diagnostics used to learn when the hierarchy is reliable.
+
+    All inputs are predictions from models fitted on earlier seasons.  The
+    feature builder deliberately does not aggregate the rows being predicted.
+    """
+    if len(channel_predictions) != 3 or len(failure_risks) != 3:
+        raise ValueError("the adaptive gate requires three channels and risks")
+    predictions = np.column_stack(channel_predictions).astype(float)
+    risks = np.column_stack(failure_risks).astype(float)
+    output = pd.DataFrame({
+        "compact_prediction": predictions[:, 0],
+        "extended_recent_prediction": predictions[:, 1],
+        "extended_latest_prediction": predictions[:, 2],
+        "middle_risk": risks[:, 0],
+        "wayoff_risk": risks[:, 1],
+        "reverse_risk": risks[:, 2],
+        "channel_std": predictions.std(axis=1),
+        "channel_range": predictions.max(axis=1) - predictions.min(axis=1),
+        "stacked_prediction": np.asarray(stacked_prediction, dtype=float),
+    })
+    numeric_columns = {
+        "log_pitcher_n": np.log1p(pd.to_numeric(
+            rows["asof_pitcher_n"], errors="coerce",
+        ).fillna(0).clip(lower=0)),
+        "log_batter_n": np.log1p(pd.to_numeric(
+            rows["asof_batter_n"], errors="coerce",
+        ).fillna(0).clip(lower=0)),
+        "li": pd.to_numeric(rows["li"], errors="coerce").fillna(0),
+        "inning": pd.to_numeric(rows["inning"], errors="coerce"),
+        "balls": pd.to_numeric(rows["balls_before"], errors="coerce"),
+        "strikes": pd.to_numeric(rows["strikes_before"], errors="coerce"),
+        "runners": pd.to_numeric(rows["num_runners_on"], errors="coerce"),
+    }
+    for name, values in numeric_columns.items():
+        output[name] = values.to_numpy(float)
+    recent = rows[[
+        "asof_pitcher_prev1_game_success_rate",
+        "asof_pitcher_prev3_game_success_rate",
+        "asof_pitcher_prev5_game_success_rate",
+    ]].apply(pd.to_numeric, errors="coerce")
+    output["recent_std"] = recent.std(axis=1).fillna(0.15).to_numpy(float)
+    career = pd.to_numeric(
+        rows["asof_pitcher_success_rate"], errors="coerce",
+    )
+    output["recent_gap"] = (
+        recent.mean(axis=1) - career
+    ).fillna(0).to_numpy(float)
+    return output.replace([np.inf, -np.inf], np.nan)
+
+
 def build_anchor_residual_features(
     rows: pd.DataFrame,
     anchor: np.ndarray,
