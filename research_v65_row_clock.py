@@ -18,6 +18,7 @@ from catboost import CatBoostRegressor
 
 
 ROOT = Path(__file__).resolve().parent
+TARGET = "control_success"
 SCALES = (0.0, 0.025, 0.05, 0.075, 0.10, 0.125, 0.15, 0.20, 0.30)
 CAT_COLUMNS = [
     "month", "game_type", "pitcher_team", "batter_team", "pitcher",
