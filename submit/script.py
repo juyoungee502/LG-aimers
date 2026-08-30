@@ -29,6 +29,9 @@ from v24_robust_candidate import (
     early_pitcher_gate,
 )
 from v25_temporal_portfolio import apply_regime, apply_temporal_portfolio
+from v64_public_transfer import (
+    apply_dynamic_pitcher_state, build_f_features,
+)
 
 
 ID_COL = "row_id"
@@ -268,6 +271,7 @@ def main():
         "v54_overlap": None,
         "v54_recent": [],
         "v54_joint": [],
+        "v64_f_residual": [],
     }
     for index in range(3):
         model = CatBoostClassifier()
@@ -380,6 +384,12 @@ def main():
                 model_dir, f"catboost_v54_joint_{index}.cbm",
             ))
             models["v54_joint"].append(joint_model)
+    if "v64_public_method_transfer" in bundle.get("model_names", []):
+        configuration = bundle["v64_public_method_transfer"]["f_residual"]
+        for filename in configuration["model_files"]:
+            residual_model = CatBoostRegressor()
+            residual_model.load_model(os.path.join(model_dir, filename))
+            models["v64_f_residual"].append(residual_model)
     print("Model version:", bundle["version"])
     test = pd.read_csv(test_path, encoding="utf-8-sig")
     if ID_COL not in test.columns or test[ID_COL].duplicated().any():
@@ -899,6 +909,37 @@ def main():
                 dict(zip(component["keys"], component["deltas"]))
             ).fillna(float(component.get("unknown_key_delta", 0.0))).to_numpy(np.float64)
             prediction += correction
+    if "v64_public_method_transfer" in bundle.get("model_names", []):
+        configuration = bundle["v64_public_method_transfer"]
+        futures = test["game_type"].astype(str).eq("F").to_numpy()
+        if futures.any():
+            f_configuration = configuration["f_residual"]
+            prior_type = {
+                int(key): str(value)
+                for key, value in f_configuration["prior_game_type"].items()
+            }
+            f_features = build_f_features(
+                test.loc[futures].reset_index(drop=True),
+                prediction[futures], prior_type,
+            )
+            expected = f_configuration["feature_columns"]
+            missing = [column for column in expected if column not in f_features]
+            unexpected = [column for column in f_features if column not in expected]
+            if missing or unexpected:
+                raise ValueError(
+                    f"v64 F schema mismatch: missing={missing[:5]}, "
+                    f"unexpected={unexpected[:5]}"
+                )
+            f_features = f_features.reindex(columns=expected)
+            centers = f_configuration["model_prediction_centers"]
+            correction = np.mean([
+                model.predict(f_features) - float(center)
+                for model, center in zip(models["v64_f_residual"], centers)
+            ], axis=0)
+            prediction[futures] += float(f_configuration["scale"]) * correction
+        prediction += apply_dynamic_pitcher_state(
+            test, configuration["r_dynamic_state"],
+        )
     if "v26_pareto_portfolio" in bundle.get("model_names", []):
         prediction += apply_temporal_portfolio(
             test, features, prediction, bundle["v26_pareto_portfolio"],
