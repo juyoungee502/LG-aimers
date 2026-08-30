@@ -1,5 +1,38 @@
 # Model guide
 
+## Train-only calibration candidate: v63
+
+V62 scored **1132.9**, only about `+0.2` over v61.  Its three structural
+corrections are therefore removed rather than rescaled.  V63 returns to the
+proven v61 path and applies only a fixed `-0.0015` probability offset after all
+model and residual components.
+
+The offset uses official training data only.  An OLS trend over the 2020--2024
+annual target rates forecasts a 2025 rate of `0.478286`; packaged v61 predicts
+`0.485355` on the full 2024-as-2025 training proxy.  The deployed offset is
+only 21% of that `-0.007069` difference.  It gains `+5.15` on strict 2024 OOF,
+and the train-trend central projection is **1140.30**.  Persistence of the 2024
+rate would reverse the calibration direction, so the honest stress range is
+wide at **1131--1145**.
+
+No leaderboard-inferred target rate, external prediction, 2025 Trackman data,
+or evaluation-row aggregation is used.
+
+```bash
+cd ~/바탕화면/LG-aimers
+git pull --ff-only origin experiment/junseo-catboost-gpu
+source .venv/bin/activate
+bash run_v63.sh
+```
+
+Copy the result to this PC:
+
+```powershell
+scp "JunseoPark@sia-com3:~/바탕화면/LG-aimers/outputs/results_v63.zip" "outputs/results_v63.zip"
+```
+
+Submit `submission_v63.zip` contained inside `outputs/results_v63.zip`.
+
 ## Public-transfer candidate: v62
 
 V61 scored **1132**, a `+7.1` gain over v60. Its observed transfer was about

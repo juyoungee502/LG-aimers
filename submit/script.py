@@ -907,6 +907,10 @@ def main():
         prediction += apply_temporal_portfolio(
             test, features, prediction, bundle["v25_temporal_portfolio"],
         )
+    if "v63_train_trend_calibration" in bundle.get("model_names", []):
+        prediction += float(
+            bundle["v63_train_trend_calibration"]["probability_offset"]
+        )
     prediction = np.clip(prediction, *bundle["clip"])
     if len(prediction) != len(test) or not np.isfinite(prediction).all():
         raise ValueError("Invalid prediction length or non-finite prediction")

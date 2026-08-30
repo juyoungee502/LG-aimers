@@ -32,6 +32,7 @@ def main():
             "v60_public_hand_shape",
             "v61_public_complete_shape",
             "v62_public_residual_frontier",
+            "v63_train_trend_calibration",
         )
         else args.expected_version
     )
