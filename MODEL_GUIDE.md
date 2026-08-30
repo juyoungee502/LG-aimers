@@ -2,6 +2,10 @@
 
 ## Conservative prediction-gap candidate: v65
 
+Public leaderboard result: **1135.0**, which is `-0.1` versus v64's
+**1135.1**.  V65 is therefore retired; new work resumes from v64 and does not
+carry the prediction-gap correction forward.
+
 The public v64 result is **1135.1**. V65 leaves that complete model intact and
 fits a strongly regularized, zero-intercept Ridge direction to disagreements
 between v64 and this project's own historical OOF checkpoints and raw members.
