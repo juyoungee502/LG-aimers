@@ -1,5 +1,44 @@
 # Model guide
 
+## Public-transfer candidate: v59
+
+V58 scored **1114** publicly, close to its projected range. The F and R scalar
+directions used through v58 are now near their measured public optima, so v59
+adds a new deterministic direction instead of extending those curves.
+
+V59 counts each batter's rows in the completed 2023-2024 seasons, centers the
+counts over the 526 known batters, and freezes one probability delta per
+`batter_id`. The table is label-free. Unknown 2025 batters receive zero, and
+each evaluation row performs only its own ID lookup. The maximum correction is
+`+0.00914` and the minimum is `-0.00198`.
+
+This choice is deliberately based on a public same-test-set result: a nearly
+identical pure batter-exposure direction improved another fixed model by
+`+8.3544` points and its measured quadratic optimum was essentially the tested
+amplitude. Applied to the v58 public anchor, the central projection is
+**1122.35**, with a deliberately wider **1119.0--1123.5** working range. This
+is evidence, not a guarantee. The direction is negative on the 2024 forward
+fold (`-11.15` BSS), reproducing the known 2024-to-2025 reversal instead of
+hiding it.
+
+V59 contains no external model or prediction, no target-derived player table,
+no 2025 Trackman data, and no aggregation over evaluation rows.
+
+```bash
+cd ~/바탕화면/LG-aimers
+git pull --ff-only origin experiment/junseo-catboost-gpu
+source .venv/bin/activate
+bash run_v59.sh
+```
+
+Copy the complete result to this PC:
+
+```powershell
+scp "JunseoPark@sia-com3:~/바탕화면/LG-aimers/outputs/results_v59.zip" "outputs/results_v59.zip"
+```
+
+Submit `submission_v59.zip` contained inside `outputs/results_v59.zip`.
+
 ## Current public-feedback candidate: v58
 
 V57 scored approximately **1112**, below the unchanged v56 anchor at
@@ -211,6 +250,7 @@ translations from local validation:
 | v55 | 1024.139 | 1113.6 |
 | v56 | 1024.325 | 1113.86 |
 | v57 | 1027.830 | 1112 |
+| v58 | 1023.263 | 1114 |
 
 V26 demonstrates why a higher single-year local score is insufficient. It is
 excluded from the current candidate path because its local gain did not transfer

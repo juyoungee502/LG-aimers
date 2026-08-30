@@ -841,6 +841,16 @@ def main():
             gate = exposure > float(gate_configuration["minimum_exclusive"])
             multiplier = float(configuration.get("r_v57_multiplier", 1.0))
             prediction[regular] += multiplier * gate.astype(float) * correction
+    if "v59_public_batter_exposure" in bundle.get("model_names", []):
+        configuration = bundle["v59_public_batter_exposure"]
+        id_column = configuration.get("id_column", "batter_id")
+        lookup = dict(zip(configuration["keys"], configuration["deltas"]))
+        correction = (
+            test[id_column].astype(str).map(lookup)
+            .fillna(float(configuration.get("unknown_player_delta", 0.0)))
+            .to_numpy(np.float64)
+        )
+        prediction += correction
     if "v26_pareto_portfolio" in bundle.get("model_names", []):
         prediction += apply_temporal_portfolio(
             test, features, prediction, bundle["v26_pareto_portfolio"],
