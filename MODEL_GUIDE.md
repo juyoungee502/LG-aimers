@@ -1,5 +1,46 @@
 # Model guide
 
+## Stable public-reference transfer: v66
+
+V66 resumes from the submitted v64 anchor (**1135.1**) and does not retain
+v65, v62, or v63.  It independently rebuilds a public solution's most useful
+idea: train-only, reliability-shrunk command deviations for a pitcher versus
+the batter side, the count advantage state, and whether runners are on base.
+The exact-count refinement was rejected because it reversed in 2024.
+
+Strict validation versus v64:
+
+| Fold | Total gain | First half | Second half | R | F |
+|---|---:|---:|---:|---:|---:|
+| 2023 | +7.907 | +1.979 | +13.836 | +6.673 | +18.524 |
+| 2024 | +4.137 | +6.047 | +2.227 | +3.583 | +8.307 |
+
+All eight chronological quarter gains are positive; the weakest is `+0.692`.
+Pitcher-clustered positive probabilities are `94.5%` (2023) and `91.4%`
+(2024), although both 95% intervals still cross zero.  The honest projected
+public range is **1135--1144**, not a guaranteed 1150.
+
+Every lookup table is rebuilt from the official 2019--2024 `train.csv` only.
+No 2025 TrackMan history, evaluation-row aggregation, external prediction, or
+external model artifact is used.
+
+Train, package, and smoke-test in one command on the GPU server:
+
+```bash
+cd ~/바탕화면/LG-aimers
+git pull --ff-only origin experiment/junseo-catboost-gpu
+source .venv/bin/activate
+bash run_v66.sh
+```
+
+Copy the complete result bundle to the local PC:
+
+```powershell
+scp "JunseoPark@sia-com3:~/바탕화면/LG-aimers/outputs/results_v66.zip" "outputs/results_v66.zip"
+```
+
+Submit `submission_v66.zip` contained inside `results_v66.zip`.
+
 ## Conservative prediction-gap candidate: v65
 
 Public leaderboard result: **1135.0**, which is `-0.1` versus v64's
