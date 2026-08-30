@@ -26,6 +26,11 @@ BASE_CATEGORICAL = (
     "recent_regime",
 )
 
+RESIDUAL_CATEGORICAL = (
+    "top_bottom", "base_state", "pitcher_hand", "batter_hand",
+    "count_state", "hand_matchup",
+)
+
 PITCHER_RATES = (
     "asof_pitcher_success_rate", "asof_pitcher_reverse_rate",
     "asof_pitcher_middle_rate", "asof_pitcher_ball_rate",
@@ -379,3 +384,75 @@ def snapshots_from_payload(payload: dict[str, dict[str, list]]) -> SeasonSnapsho
         pitcher=tables["pitcher"], batter=tables["batter"],
         pitchmix=tables["pitchmix"],
     )
+
+
+def build_anchor_residual_features(
+    rows: pd.DataFrame,
+    anchor: np.ndarray,
+    hierarchical_prediction: np.ndarray,
+) -> pd.DataFrame:
+    """Small, row-local feature set for correcting a strong anchor's residual."""
+    anchor = np.asarray(anchor, dtype=float)
+    ours = np.asarray(hierarchical_prediction, dtype=float)
+    if len(rows) != len(anchor) or len(rows) != len(ours):
+        raise ValueError("residual feature inputs have different lengths")
+    gap = ours - anchor
+    output = pd.DataFrame({
+        "anchor": anchor,
+        "hierarchical_prediction": ours,
+        "prediction_gap": gap,
+        "absolute_prediction_gap": np.abs(gap),
+        "squared_prediction_gap": np.square(gap),
+        "prediction_midpoint": 0.5 * (anchor + ours),
+        "anchor_uncertainty": anchor * (1.0 - anchor),
+    })
+    numeric_columns = (
+        "game_month", "game_dayofweek", "inning", "balls_before",
+        "strikes_before", "outs_before", "score_diff_home",
+        "score_diff_pitcher_team", "num_runners_on", "home_win_expectancy",
+        "li", "asof_pitcher_n", "asof_pitcher_success_rate",
+        "asof_pitcher_reverse_rate", "asof_pitcher_middle_rate",
+        "asof_pitcher_prev1_game_success_rate",
+        "asof_pitcher_prev3_game_success_rate",
+        "asof_pitcher_prev5_game_success_rate",
+        "asof_pitcher_prev1_game_middle_rate",
+        "asof_pitcher_prev3_game_middle_rate",
+        "asof_pitcher_prev5_game_middle_rate",
+        "asof_batter_n", "asof_batter_success_rate",
+        "asof_batter_middle_rate", "asof_pitcher_pitchmix_n",
+        "asof_pitcher_fastball_rate", "asof_pitcher_breaking_rate",
+        "asof_pitcher_offspeed_rate",
+    )
+    for column in numeric_columns:
+        output[column] = pd.to_numeric(rows[column], errors="coerce").to_numpy()
+    output["log_pitcher_n"] = np.log1p(output["asof_pitcher_n"].clip(lower=0))
+    output["log_batter_n"] = np.log1p(output["asof_batter_n"].clip(lower=0))
+    output["pitcher_batter_career_gap"] = (
+        output["asof_pitcher_success_rate"]
+        - output["asof_batter_success_rate"]
+    )
+    output["recent_success_mean"] = output[[
+        "asof_pitcher_prev1_game_success_rate",
+        "asof_pitcher_prev3_game_success_rate",
+        "asof_pitcher_prev5_game_success_rate",
+    ]].mean(axis=1)
+    output["recent_success_std"] = output[[
+        "asof_pitcher_prev1_game_success_rate",
+        "asof_pitcher_prev3_game_success_rate",
+        "asof_pitcher_prev5_game_success_rate",
+    ]].std(axis=1)
+    output["count_state"] = (
+        rows["balls_before"].astype(str) + "-"
+        + rows["strikes_before"].astype(str)
+    )
+    output["hand_matchup"] = (
+        rows["pitcher_hand"].astype(str) + "-"
+        + rows["batter_hand"].astype(str)
+    )
+    for column in ("top_bottom", "base_state", "pitcher_hand", "batter_hand"):
+        output[column] = rows[column].astype("string").fillna("__MISSING__").astype(str)
+    for column in ("count_state", "hand_matchup"):
+        output[column] = output[column].astype("string").fillna("__MISSING__").astype(str)
+    numeric = [column for column in output if column not in RESIDUAL_CATEGORICAL]
+    output[numeric] = output[numeric].replace([np.inf, -np.inf], np.nan)
+    return output

@@ -172,11 +172,13 @@ def report_segments(
         "gain": gain(target, anchor, candidate),
         "half_gains": [gain(target[p], anchor[p], candidate[p]) for p in halves],
         "quarter_gains": [gain(target[p], anchor[p], candidate[p]) for p in quarters],
-        "regular_gain": gain(
-            target[regular], anchor[regular], candidate[regular],
+        "regular_gain": (
+            gain(target[regular], anchor[regular], candidate[regular])
+            if regular.any() else None
         ),
-        "futures_gain": gain(
-            target[~regular], anchor[~regular], candidate[~regular],
+        "futures_gain": (
+            gain(target[~regular], anchor[~regular], candidate[~regular])
+            if (~regular).any() else None
         ),
         "mean_absolute_change": float(np.mean(np.abs(candidate - anchor))),
     }
