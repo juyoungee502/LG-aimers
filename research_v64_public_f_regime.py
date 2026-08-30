@@ -143,20 +143,32 @@ def scale_report(
     target: np.ndarray,
     base: np.ndarray,
     correction: np.ndarray,
+    *,
+    full_target: np.ndarray | None = None,
+    full_base: np.ndarray | None = None,
+    full_mask: np.ndarray | None = None,
 ) -> list[dict]:
     quarters = np.array_split(np.arange(len(target)), 4)
     output = []
     for scale in SCALES:
         delta = scale * correction
-        output.append({
+        row = {
             "scale": scale,
             "gain": gain(target, base, delta),
+            "shape_only_diagnostic_gain": gain(
+                target, base, scale * (correction - correction.mean()),
+            ),
             "quarter_gains": [
                 gain(target[index], base[index], delta[index]) for index in quarters
             ],
             "correction_mean": float(delta.mean()),
             "correction_std": float(delta.std()),
-        })
+        }
+        if full_target is not None and full_base is not None and full_mask is not None:
+            full_delta = np.zeros(len(full_target), dtype=float)
+            full_delta[full_mask] = delta
+            row["full_season_gain"] = gain(full_target, full_base, full_delta)
+        output.append(row)
     return output
 
 
@@ -196,6 +208,7 @@ def main() -> None:
     forward_correction, forward_centers = fit_predict(
         x23, y23 - b23, x24, args,
     )
+    y24_all, b24_all = target[seasons == 2024], base[seasons == 2024]
     report = {
         "baseline": "v61_public_complete_shape",
         "candidate_family": "public_rebuilt_f_residual_transition",
@@ -203,7 +216,10 @@ def main() -> None:
         "within_2023_second_half": scale_report(
             y23[split:], b23[split:], within_correction,
         ),
-        "forward_2023_to_2024": scale_report(y24, b24, forward_correction),
+        "forward_2023_to_2024": scale_report(
+            y24, b24, forward_correction,
+            full_target=y24_all, full_base=b24_all, full_mask=f24,
+        ),
         "model_source_prediction_centers": {
             "within": within_centers, "forward": forward_centers,
         },
