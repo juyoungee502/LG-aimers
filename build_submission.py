@@ -29,6 +29,7 @@ def main():
             "v57_conservative_r_table",
             "v58_public_feedback_counterstep",
             "v59_public_batter_exposure",
+            "v60_public_hand_shape",
         )
         else args.expected_version
     )

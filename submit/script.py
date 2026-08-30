@@ -851,6 +851,17 @@ def main():
             .to_numpy(np.float64)
         )
         prediction += correction
+    if "v60_public_hand_shape" in bundle.get("model_names", []):
+        configuration = bundle["v60_public_hand_shape"]
+        columns = configuration["key_columns"]
+        keys = test[columns[0]].astype(str)
+        for column in columns[1:]:
+            keys = keys.str.cat(test[column].astype(str), sep="|")
+        lookup = dict(zip(configuration["keys"], configuration["deltas"]))
+        correction = keys.map(lookup).fillna(
+            float(configuration.get("unknown_key_delta", 0.0))
+        ).to_numpy(np.float64)
+        prediction += correction
     if "v26_pareto_portfolio" in bundle.get("model_names", []):
         prediction += apply_temporal_portfolio(
             test, features, prediction, bundle["v26_pareto_portfolio"],

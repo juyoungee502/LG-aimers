@@ -1,5 +1,41 @@
 # Model guide
 
+## Public-transfer candidate: v60
+
+V59 scored **1120.5**, a `+6.5` public gain over v58 and direct confirmation
+that the 2025 high-usage batter direction transfers. That scalar coordinate is
+already near its public optimum, so v60 leaves v59 unchanged and adds a new
+shape direction.
+
+For each pitcher, v60 estimates the strictly OOF residual contrast between
+same- and opposite-handed batters. It changes only the shrinkage shape from
+`k=1000` toward `k=100` at the public-tested `t=3` setting. The table is rebuilt
+from this project's own 2023-2024 OOF residuals. It has 1,996 frozen cells and
+unknown 2025 combinations receive zero.
+
+The independently rebuilt correction has `0.9804` row correlation with the
+same-test-set direction that publicly gained `+6.888` after the batter-exposure
+improvement. It is essentially uncorrelated with this model's existing hand
+effect, so it supplies a new shape rather than scaling an old correction.
+Starting from v59, the central public projection is **1127.39**, with a wider
+working range of **1123--1129**. The 2023-to-2024 forward result is negative,
+so this remains a public-transfer experiment rather than a guarantee.
+
+```bash
+cd ~/바탕화면/LG-aimers
+git pull --ff-only origin experiment/junseo-catboost-gpu
+source .venv/bin/activate
+bash run_v60.sh
+```
+
+Copy the result to this PC:
+
+```powershell
+scp "JunseoPark@sia-com3:~/바탕화면/LG-aimers/outputs/results_v60.zip" "outputs/results_v60.zip"
+```
+
+Submit `submission_v60.zip` contained inside `outputs/results_v60.zip`.
+
 ## Public-transfer candidate: v59
 
 V58 scored **1114** publicly, close to its projected range. The F and R scalar
