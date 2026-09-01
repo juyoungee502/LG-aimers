@@ -1,5 +1,48 @@
 # Model guide
 
+## Original count-geometry candidate: v67
+
+V67 starts from the submitted v65 anchor (**1135.0**) exactly as requested.
+It removes every v66 component and does not use an external reference model or
+prediction.  The only new signal is an original pitcher-by-count command shape:
+the 12 ball/strike cells are adjusted for pitcher level and league count
+difficulty, shrunk by exposure, and denoised to rank one.  The frozen table is
+then looked up independently for each evaluation row.
+
+Strict prior-season validation versus v65:
+
+| Fold | Total gain | First half | Second half | R | F |
+|---|---:|---:|---:|---:|---:|
+| 2023 | +1.292 | +0.312 | +2.272 | +1.058 | +3.308 |
+| 2024 | +3.050 | +2.361 | +3.739 | +3.378 | +0.602 |
+
+All eight chronological quarter gains are positive; the weakest is `+0.301`.
+In 100,000 pitcher-clustered bootstrap samples, the positive probabilities are
+`91.1%` for 2023 and `98.2%` for 2024.  The correction is deliberately small:
+mean absolute OOF probability changes are about `0.00059`.  The honest public
+range is **1135--1143**, not a guaranteed improvement.
+
+Only official 2019--2024 `train.csv` rows build the production table.  V67 does
+not use 2025 TrackMan history, evaluation-row aggregation, current pitch type,
+v62, v63, or v66.
+
+Train, validate, package, and smoke-test on the GPU server:
+
+```bash
+cd ~/바탕화면/LG-aimers
+git pull --ff-only origin experiment/junseo-catboost-gpu
+source .venv/bin/activate
+bash run_v67.sh
+```
+
+Copy the complete result bundle to the local PC:
+
+```powershell
+scp "JunseoPark@sia-com3:~/바탕화면/LG-aimers/outputs/results_v67.zip" "outputs/results_v67.zip"
+```
+
+Submit `submission_v67.zip` contained inside `results_v67.zip`.
+
 ## Stable public-reference transfer: v66
 
 V66 resumes from the submitted v64 anchor (**1135.1**) and does not retain

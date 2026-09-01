@@ -33,7 +33,6 @@ from v64_public_transfer import (
     apply_dynamic_pitcher_state, build_f_features,
 )
 from v65_prediction_gap import prediction_gap_correction
-from v66_reference_deviations import apply_nested_deviations
 
 
 ID_COL = "row_id"
@@ -991,8 +990,14 @@ def main():
             f_specialist_prediction, configuration,
         )
     if "v66_reference_nested_deviations" in bundle.get("model_names", []):
+        from v66_reference_deviations import apply_nested_deviations
         prediction += apply_nested_deviations(
             test, bundle["v66_reference_nested_deviations"],
+        )
+    if "v67_original_count_geometry" in bundle.get("model_names", []):
+        from v67_count_geometry import apply_count_geometry
+        prediction += apply_count_geometry(
+            test, bundle["v67_original_count_geometry"],
         )
     prediction = np.clip(prediction, *bundle["clip"])
     if len(prediction) != len(test) or not np.isfinite(prediction).all():
